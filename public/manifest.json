@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "ShiftMate - 시프트메이트",
+  "short_name": "ShiftMate",
+  "description": "스마트한 근무 스케줄 관리 및 주휴수당·실수령액 자동 정산 앱",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf8ff",
+  "theme_color": "#004ac6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

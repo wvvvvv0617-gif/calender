@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#004ac6"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#0053db"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#00174b" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)"/>
+  <!-- Inner White Card Circle -->
+  <circle cx="256" cy="256" r="160" fill="#ffffff" opacity="0.12"/>
+  <!-- Clock / Shift Dial -->
+  <circle cx="256" cy="256" r="120" stroke="#ffffff" stroke-width="24" fill="none"/>
+  <!-- Clock Hands -->
+  <line x1="256" y1="256" x2="256" y2="176" stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
+  <line x1="256" y1="256" x2="320" y2="256" stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
+  <!-- Center Pin -->
+  <circle cx="256" cy="256" r="14" fill="#ffffff"/>
+  <!-- Sparkle Accent in top right -->
+  <circle cx="360" cy="150" r="28" fill="#6cf8bb" filter="url(#dropShadow)"/>
+  <path d="M360 134 L364 146 L376 150 L364 154 L360 166 L356 154 L344 150 L356 146 Z" fill="#004ac6"/>
+</svg>

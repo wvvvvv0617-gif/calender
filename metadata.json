@@ -1,0 +1,8 @@
+{
+  "name": "ShiftMate",
+  "description": "스마트한 근무 스케줄 관리 및 주휴수당·실수령액 자동 정산 앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
