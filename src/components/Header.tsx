@@ -211,15 +211,15 @@ export const Header: React.FC = () => {
 
         {/* Right: Download App, Notifications & Profile */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* PWA Install Button */}
+          {/* PWA Install & Shortcut Button */}
           <button
             onClick={openPwaModal}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#dbe1ff]/60 hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#004ac6] text-white hover:bg-[#003ea8] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
             type="button"
-            title="스마트폰 홈화면에 앱 다운로드"
+            title="스마트폰 홈화면에 앱 설치 및 사이트 바로 접속"
           >
             <span className="material-symbols-outlined text-[16px]">install_mobile</span>
-            <span className="hidden sm:inline">앱 다운로드</span>
+            <span className="text-[11px] sm:text-xs">홈화면 설치</span>
           </button>
 
           {/* Notifications button with Red Dot disappearing on read */}

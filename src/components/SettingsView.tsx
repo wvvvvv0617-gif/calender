@@ -462,7 +462,7 @@ export const SettingsView: React.FC = () => {
         </button>
       </section>
 
-      {/* Mobile Download PWA Banner */}
+      {/* Mobile Download PWA & HTML Shortcut Banner */}
       <section className="bg-gradient-to-r from-[#dbe1ff] via-[#eaedff] to-[#6cf8bb]/30 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs border border-[#c3c6d7]/30">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-[#004ac6] text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -470,18 +470,18 @@ export const SettingsView: React.FC = () => {
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold text-[#131b2e] truncate">
-              핸드폰 홈 화면에 앱 다운로드
+              홈 화면에 앱 추가 & 바로가기 사이트 접속
             </span>
             <span className="text-[11px] text-[#434655] truncate">
-              브라우저를 닫아도 항상 안전하게 저장 및 오프라인 사용 가능
+              스마트폰 PWA 설치, 바로가기 HTML 다운로드 및 사이트 직접 연결
             </span>
           </div>
         </div>
         <button
           onClick={openPwaModal}
-          className="shrink-0 px-3 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs hover:bg-[#003ea8] active:scale-95 transition-all"
+          className="shrink-0 px-3.5 py-2 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs hover:bg-[#003ea8] active:scale-95 transition-all cursor-pointer"
         >
-          설치 가이드
+          설치 & 바로가기
         </button>
       </section>
 
