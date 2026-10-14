@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useShift } from '../context/ShiftContext';
 import { formatKRW, calculateShiftPay, calculatePaydayDDay } from '../utils/calculations';
+import { getKoreanHoliday, getHolidaysForMonth } from '../utils/holidays';
+import { getShiftColorPalette, PRESET_COLOR_PALETTES } from '../utils/themeColors';
 
 export const CalendarView: React.FC = () => {
   const {
@@ -33,6 +35,13 @@ export const CalendarView: React.FC = () => {
   const [draggedPresetId, setDraggedPresetId] = useState<string | null>(null);
   const [draggedFromDate, setDraggedFromDate] = useState<string | null>(null);
 
+  // Map of presets for quick theme resolution
+  const presetMap = useMemo(() => {
+    const map = new Map<string, (typeof presets)[0]>();
+    presets.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [presets]);
+
   // Long press timer ref for mobile touch deletion
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -46,6 +55,11 @@ export const CalendarView: React.FC = () => {
     const parts = currentMonth.split('-').map(Number);
     return [parts[0] || 2026, parts[1] || 10];
   }, [currentMonth]);
+
+  // Holidays in current selected month
+  const monthHolidays = useMemo(() => {
+    return getHolidaysForMonth(year, month);
+  }, [year, month]);
 
   const handlePrevMonth = () => {
     let newYear = year;
@@ -153,26 +167,33 @@ export const CalendarView: React.FC = () => {
     return `${m}월 ${d}일 (${dayNames[dateObj.getDay()]})`;
   }, [selectedDate]);
 
+  // Selected Date Holiday check
+  const selectedDateHoliday = useMemo(() => {
+    return getKoreanHoliday(selectedDate);
+  }, [selectedDate]);
+
+  // Selected Date Color Palette (matches preset color)
+  const selectedDatePalette = useMemo(() => {
+    return getShiftColorPalette(selectedShift, presetMap);
+  }, [selectedShift, presetMap]);
+
   const activeQuickPreset = useMemo(() => {
     return presets.find((p) => p.id === quickStampPresetId) || presets[0];
   }, [presets, quickStampPresetId]);
 
   // --- WEEKLY VIEW LOGIC ---
-  // Active week reference date (based on selectedDate)
   const [weekRefDateStr, setWeekRefDateStr] = useState<string>(selectedDate || todayDate);
 
-  // Sync weekRefDateStr when selectedDate changes
   React.useEffect(() => {
     if (selectedDate) {
       setWeekRefDateStr(selectedDate);
     }
   }, [selectedDate]);
 
-  // Calculate Monday of the active week
   const weekDays = useMemo(() => {
     const [refY, refM, refD] = weekRefDateStr.split('-').map(Number);
     const targetDate = new Date(refY, refM - 1, refD);
-    const dayOfWeek = targetDate.getDay(); // 0 is Sun, 1 is Mon
+    const dayOfWeek = targetDate.getDay();
     const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 
     const monday = new Date(targetDate);
@@ -183,7 +204,7 @@ export const CalendarView: React.FC = () => {
       dateNumber: number;
       monthNumber: number;
       yearNumber: number;
-      dayOfWeek: number; // 0=Mon, 6=Sun
+      dayOfWeek: number;
       dayName: string;
     }> = [];
 
@@ -234,7 +255,6 @@ export const CalendarView: React.FC = () => {
     setCurrentMonth(todayDate.slice(0, 7));
   };
 
-  // Weekly Stats calculation
   const weeklyStats = useMemo(() => {
     let totalWorkedHours = 0;
     let totalPay = 0;
@@ -251,7 +271,6 @@ export const CalendarView: React.FC = () => {
     });
 
     const isHolidayPayEligible = totalWorkedHours >= 15;
-    // Estimated weekly holiday pay if eligible: (hours / 40) * 8 * wage
     const estimatedWeeklyHolidayPay = isHolidayPayEligible
       ? Math.round(Math.min(totalWorkedHours / 40, 1) * 8 * activeWorkplace.hourlyWage)
       : 0;
@@ -341,7 +360,6 @@ export const CalendarView: React.FC = () => {
       }
       setDraggedPresetId(null);
     } else if (draggedFromDate && draggedFromDate !== dateStr) {
-      // Moved shift from one day to another
       const sourceShift = shiftMap.get(draggedFromDate);
       if (sourceShift) {
         stampPresetOnDate(dateStr, sourceShift.presetId || presets[0].id);
@@ -351,7 +369,6 @@ export const CalendarView: React.FC = () => {
     }
   };
 
-  // Trash zone drop handler
   const handleTrashDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (draggedFromDate) {
@@ -362,7 +379,7 @@ export const CalendarView: React.FC = () => {
   };
 
   return (
-    <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-7xl mx-auto px-4 md:px-6 pt-2">
+    <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-7xl mx-auto px-3 sm:px-4 md:px-6 pt-2">
       {/* Auto-Save & Empty State Helpful Prompt */}
       {shifts.length === 0 && (
         <div className="p-3.5 rounded-2xl bg-[#eaedff] border border-[#004ac6]/20 flex items-center justify-between gap-3 shadow-xs">
@@ -382,10 +399,10 @@ export const CalendarView: React.FC = () => {
       )}
 
       {/* 1. Monthly Financial Summary Card */}
-      <section className="bg-white rounded-2xl p-5 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-3 relative overflow-hidden">
+      <section className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-3 relative overflow-hidden">
         <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full bg-[#004ac6]/10 blur-2xl pointer-events-none"></div>
 
-        <div className="flex items-center justify-between relative z-10">
+        <div className="flex items-center justify-between relative z-10 flex-wrap gap-2">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-semibold text-[#434655]">{month}월 예상 수령액</span>
             <button
@@ -417,7 +434,7 @@ export const CalendarView: React.FC = () => {
           </div>
         </div>
 
-        {/* Micro Stats Bento Grid */}
+        {/* Micro Stats Bento Grid (Responsive on Galaxy Fold & Tablets) */}
         <div className="grid grid-cols-3 gap-2 pt-1 relative z-10">
           <div className="bg-[#f2f3ff] rounded-xl p-2.5 flex flex-col">
             <span className="text-[11px] font-medium text-[#434655]">총 근무</span>
@@ -443,7 +460,6 @@ export const CalendarView: React.FC = () => {
       {/* 2. Month/Week Navigation & Segmented View Controls */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Swapping Controls depending on mode */}
           {calendarViewMode === 'weekly' ? (
             <div className="flex items-center gap-2">
               <button
@@ -470,7 +486,7 @@ export const CalendarView: React.FC = () => {
                 className="px-2.5 py-1 rounded-full bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all shadow-xs active:scale-95 ml-1 cursor-pointer"
                 title="이번 주 날짜로 이동"
               >
-                이번 주로 이동
+                이번 주
               </button>
             </div>
           ) : (
@@ -499,7 +515,7 @@ export const CalendarView: React.FC = () => {
                 className="px-2.5 py-1 rounded-full bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all shadow-xs active:scale-95 ml-1 cursor-pointer"
                 title="오늘 날짜로 이동"
               >
-                오늘로 이동
+                오늘
               </button>
             </div>
           )}
@@ -558,18 +574,18 @@ export const CalendarView: React.FC = () => {
 
       {/* 3. CALENDAR CONTENT: CONDITIONALLY RENDERED BASED ON VIEW MODE */}
 
-      {/* VIEW A: MONTHLY VIEW (Full 7-Column Grid) */}
+      {/* VIEW A: MONTHLY VIEW (Full 7-Column Grid with Red Holidays and Preset-matching Selected Color) */}
       {calendarViewMode === 'monthly' && (
-        <section className="bg-white rounded-2xl p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col">
+        <section className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col">
           {/* Quick Stamp Mode Banner */}
           <div className="mb-3 px-3 py-2 rounded-xl bg-[#dbe1ff]/50 border border-[#004ac6]/20 flex items-center justify-between text-xs flex-wrap gap-2">
             <div className="flex items-center gap-2 text-[#004ac6] font-bold">
-              <span className="material-symbols-outlined text-[18px] animate-pulse">touch_app</span>
+              <span className="material-symbols-outlined text-[18px]">touch_app</span>
               <span>
                 스탬프 모드:{' '}
                 <button
                   onClick={() => setIsQuickStampActive(!isQuickStampActive)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer transition-all ${
                     isQuickStampActive ? 'bg-[#004ac6] text-white' : 'bg-[#737686] text-white'
                   }`}
                 >
@@ -584,9 +600,36 @@ export const CalendarView: React.FC = () => {
             </div>
             <span className="text-[#434655] text-[11px] flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px] text-[#ad0033]">delete</span>
-              <span>우클릭 또는 꾹 누르면 삭제 · 하단 휴지통으로 드래그 삭제 가능</span>
+              <span>우클릭 또는 꾹 누르면 삭제 · 하단 휴지통으로 드래그 삭제</span>
             </span>
           </div>
+
+          {/* Monthly Public Holidays Summary Banner (공휴일 요약 표시) */}
+          {monthHolidays.length > 0 && (
+            <div className="mb-2.5 px-3 py-2 rounded-xl bg-[#fff5f5] border border-[#ffcdd2]/70 flex items-center gap-2 text-xs flex-wrap">
+              <span className="font-extrabold text-[#b30026] flex items-center gap-1 shrink-0">
+                <span className="w-2 h-2 rounded-full bg-[#b30026] animate-pulse"></span>
+                이달의 법정공휴일:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {monthHolidays.map((h) => (
+                  <button
+                    key={h.dateStr}
+                    type="button"
+                    onClick={() => setSelectedDate(h.dateStr)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      selectedDate === h.dateStr
+                        ? 'bg-[#b30026] text-white shadow-xs'
+                        : 'bg-white text-[#b30026] hover:bg-[#ffebee] border border-[#ffcdd2]'
+                    }`}
+                  >
+                    <span>{month}.{h.day}</span>
+                    <span>{h.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Day of Week Headers */}
           <div className="grid grid-cols-7 text-center pb-2 text-xs font-semibold text-[#434655]">
@@ -596,17 +639,24 @@ export const CalendarView: React.FC = () => {
             <span>목</span>
             <span>금</span>
             <span className="text-[#004ac6]">토</span>
-            <span className="text-[#ad0033]">일</span>
+            <span className="text-[#b30026]">일</span>
           </div>
 
           {/* Calendar 7-Column Grid */}
-          <div className="grid grid-cols-7 gap-y-2 gap-x-1.5 text-center" id="calendarGrid">
+          <div className="grid grid-cols-7 gap-y-2 gap-x-1 sm:gap-x-1.5 text-center" id="calendarGrid">
             {calendarDays.map((cell) => {
               const shift = shiftMap.get(cell.dateStr);
               const isSelected = selectedDate === cell.dateStr;
               const isToday = todayDate === cell.dateStr;
               const isWeekendSat = cell.dayOfWeek === 5;
               const isWeekendSun = cell.dayOfWeek === 6;
+
+              // Public Holiday Check (User Requested: 빨간색 & 공휴일명 표기)
+              const holiday = getKoreanHoliday(cell.dateStr);
+              const isHoliday = !!holiday;
+
+              // Shift theme palette
+              const palette = getShiftColorPalette(shift, presetMap);
 
               return (
                 <div
@@ -620,27 +670,67 @@ export const CalendarView: React.FC = () => {
                   onDrop={() => handleDrop(cell.dateStr)}
                   draggable={!!shift}
                   onDragStart={(e) => handleDragStart(e, cell.dateStr)}
-                  title={shift ? `${shift.name} (우클릭 또는 꾹 눌러서 삭제)` : '탭하여 근무 등록'}
-                  className={`flex flex-col items-center py-1.5 px-0.5 rounded-xl transition-all min-h-[64px] relative cursor-pointer select-none ${
-                    !cell.isCurrentMonth ? 'opacity-30' : ''
+                  title={
+                    holiday
+                      ? `법정 공휴일: ${holiday.name}${shift ? ` · ${shift.name}` : ''}`
+                      : shift
+                      ? `${shift.name} (우클릭 또는 꾹 눌러서 삭제)`
+                      : '탭하여 근무 등록'
+                  }
+                  style={
+                    isSelected
+                      ? {
+                          borderColor: isHoliday
+                            ? '#b30026'
+                            : shift
+                            ? palette.hex
+                            : '#004ac6',
+                          backgroundColor: isHoliday
+                            ? '#ffebee80'
+                            : shift
+                            ? palette.softBgHex + '33'
+                            : '#dbe1ff40',
+                        }
+                      : undefined
+                  }
+                  className={`flex flex-col items-center py-1.5 px-0.5 rounded-xl transition-all min-h-[70px] sm:min-h-[76px] md:min-h-[82px] relative cursor-pointer select-none border ${
+                    !cell.isCurrentMonth ? 'opacity-35' : ''
                   } ${
                     isSelected
-                      ? 'bg-[#dbe1ff]/60 border-2 border-[#004ac6] shadow-sm scale-[1.02]'
+                      ? 'border-2 shadow-sm scale-[1.02]'
                       : isToday
-                      ? 'bg-[#eaedff] border border-[#004ac6]/30'
-                      : 'hover:bg-[#f2f3ff] border border-transparent'
+                      ? isHoliday
+                        ? 'bg-[#ffebee]/70 border-[#b30026]/40'
+                        : 'bg-[#eaedff] border-[#004ac6]/30'
+                      : isHoliday
+                      ? 'bg-[#fff5f5] hover:bg-[#ffebee]/60 border-[#ffcdd2]/50'
+                      : 'hover:bg-[#f2f3ff] border-transparent'
                   }`}
                 >
-                  {/* Date Number Badge */}
+                  {/* Date Number Badge (공휴일 & 일요일 빨간색 표기) */}
                   <div className="flex items-center gap-0.5">
                     <span
-                      className={`text-xs font-bold flex items-center justify-center w-6 h-6 rounded-full ${
+                      style={
                         isSelected
-                          ? 'bg-[#004ac6] text-white shadow-xs'
+                          ? {
+                              backgroundColor: isHoliday
+                                ? '#b30026'
+                                : shift
+                                ? palette.hex
+                                : '#004ac6',
+                              color: '#ffffff',
+                            }
+                          : undefined
+                      }
+                      className={`text-xs font-bold flex items-center justify-center w-6 h-6 rounded-full transition-all ${
+                        isSelected
+                          ? 'shadow-xs font-black'
                           : isToday
-                          ? 'ring-2 ring-[#004ac6] text-[#004ac6] font-black'
-                          : isWeekendSun
-                          ? 'text-[#ad0033]'
+                          ? isHoliday
+                            ? 'ring-2 ring-[#b30026] text-[#b30026] font-black bg-[#ffebee]'
+                            : 'ring-2 ring-[#004ac6] text-[#004ac6] font-black'
+                          : isHoliday || isWeekendSun
+                          ? 'text-[#b30026] font-black'
                           : isWeekendSat
                           ? 'text-[#004ac6]'
                           : 'text-[#131b2e]'
@@ -649,32 +739,34 @@ export const CalendarView: React.FC = () => {
                       {cell.dayNumber}
                     </span>
                     {isToday && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#004ac6]"></span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isHoliday ? 'bg-[#b30026]' : 'bg-[#004ac6]'}`}></span>
                     )}
                   </div>
+
+                  {/* Public Holiday Tag Badge (날짜 아래에 어떤 공휴일인지 빨간색으로 표기) */}
+                  {holiday && (
+                    <div className="w-full flex justify-center px-0.5 my-0.5">
+                      <span
+                        className="text-[10px] sm:text-[11px] leading-tight font-black text-[#b30026] bg-[#ffebee] border border-[#ffcdd2] px-1 py-0.5 rounded text-center truncate max-w-full shadow-2xs tracking-tighter block"
+                        title={holiday.name}
+                      >
+                        {holiday.name}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Shift Tag Chip */}
                   {shift && (
                     <div className="mt-1 w-full px-0.5 relative group">
-                      {shift.type === 'leave' ? (
-                        <span className="block truncate px-1 py-0.5 rounded bg-[#ffdadb] text-[#ad0033] font-bold text-[10px] leading-tight">
-                          {shift.leaveType || '휴무'}
-                        </span>
-                      ) : (
-                        <span
-                          className={`block truncate px-1 py-0.5 rounded font-bold text-[10px] leading-tight ${
-                            shift.name.includes('연구')
-                              ? 'bg-[#dbe1ff] text-[#004ac6]'
-                              : shift.name.includes('마감')
-                              ? 'bg-[#dbe1ff] text-[#004ac6]'
-                              : shift.name.includes('미들')
-                              ? 'bg-[#6ffbbe]/40 text-[#00714d]'
-                              : 'bg-[#eaedff] text-[#004ac6]'
-                          }`}
-                        >
-                          {shift.name}
-                        </span>
-                      )}
+                      <span
+                        className="block truncate px-1 py-0.5 rounded font-bold text-[10px] leading-tight"
+                        style={{
+                          backgroundColor: palette.softBgHex,
+                          color: palette.hex,
+                        }}
+                      >
+                        {shift.type === 'leave' ? shift.leaveType || '휴무' : shift.name}
+                      </span>
 
                       {/* Quick Delete overlay X icon on hover */}
                       <button
@@ -740,7 +832,10 @@ export const CalendarView: React.FC = () => {
               const isToday = todayDate === day.dateStr;
               const isSat = day.dayOfWeek === 5;
               const isSun = day.dayOfWeek === 6;
+              const holiday = getKoreanHoliday(day.dateStr);
+              const isHoliday = !!holiday;
               const shiftCalc = shift ? calculateShiftPay(shift) : null;
+              const palette = getShiftColorPalette(shift, presetMap);
 
               return (
                 <div
@@ -749,33 +844,58 @@ export const CalendarView: React.FC = () => {
                   onContextMenu={(e) => handleContextMenu(e, day.dateStr)}
                   onDragOver={handleDragOver}
                   onDrop={() => handleDrop(day.dateStr)}
+                  style={
+                    isSelected
+                      ? {
+                          borderColor: isHoliday ? '#b30026' : shift ? palette.hex : '#004ac6',
+                          backgroundColor: isHoliday ? '#ffebee80' : shift ? palette.softBgHex + '33' : '#dbe1ff33',
+                        }
+                      : undefined
+                  }
                   className={`flex flex-col rounded-2xl p-3 border transition-all cursor-pointer relative ${
                     isSelected
-                      ? 'bg-[#dbe1ff]/50 border-[#004ac6] shadow-sm ring-2 ring-[#004ac6]/20'
+                      ? 'shadow-sm ring-2 ring-[#004ac6]/20'
                       : isToday
-                      ? 'bg-[#eaedff]/60 border-[#004ac6]/40'
+                      ? isHoliday
+                        ? 'bg-[#ffebee]/60 border-[#b30026]/40'
+                        : 'bg-[#eaedff]/60 border-[#004ac6]/40'
+                      : isHoliday
+                      ? 'bg-[#fff5f5] hover:bg-[#ffebee]/50 border-[#ffcdd2]/60'
                       : 'bg-[#faf8ff] hover:bg-[#f2f3ff] border-[#c3c6d7]/30'
                   }`}
                 >
                   {/* Day Header */}
-                  <div className="flex items-center justify-between pb-2 border-b border-[#c3c6d7]/20">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#c3c6d7]/20 flex-wrap gap-1">
                     <div className="flex items-center gap-1.5">
                       <span
                         className={`text-xs font-extrabold ${
-                          isSun ? 'text-[#ad0033]' : isSat ? 'text-[#004ac6]' : 'text-[#131b2e]'
+                          isHoliday || isSun ? 'text-[#b30026]' : isSat ? 'text-[#004ac6]' : 'text-[#131b2e]'
                         }`}
                       >
                         {day.dayName}요일
                       </span>
-                      <span className="text-xs text-[#737686]">
+                      <span
+                        className={`text-xs font-bold ${
+                          isHoliday || isSun ? 'text-[#b30026]' : 'text-[#737686]'
+                        }`}
+                      >
                         {day.monthNumber}.{day.dateNumber}
                       </span>
                     </div>
 
                     {isToday && (
-                      <span className="px-1.5 py-0.2 rounded bg-[#004ac6] text-white text-[9px] font-bold">
+                      <span className={`px-1.5 py-0.2 rounded text-white text-[9px] font-bold ${isHoliday ? 'bg-[#b30026]' : 'bg-[#004ac6]'}`}>
                         오늘
                       </span>
+                    )}
+
+                    {/* Weekly Public Holiday Badge */}
+                    {holiday && (
+                      <div className="w-full mt-0.5">
+                        <span className="px-2 py-0.5 rounded bg-[#ffebee] border border-[#ffcdd2] text-[#b30026] text-[10px] font-extrabold block truncate">
+                          🔴 {holiday.name}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -785,11 +905,11 @@ export const CalendarView: React.FC = () => {
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
                           <span
-                            className={`px-2 py-0.5 rounded-lg text-xs font-bold truncate ${
-                              shift.type === 'leave'
-                                ? 'bg-[#ffdadb] text-[#ad0033]'
-                                : 'bg-[#dbe1ff] text-[#004ac6]'
-                            }`}
+                            className="px-2 py-0.5 rounded-lg text-xs font-bold truncate"
+                            style={{
+                              backgroundColor: palette.softBgHex,
+                              color: palette.hex,
+                            }}
                           >
                             {shift.name}
                           </span>
@@ -909,12 +1029,14 @@ export const CalendarView: React.FC = () => {
                 const dayName = dayNames[dateObj.getDay()];
                 const isSat = dateObj.getDay() === 6;
                 const isSun = dateObj.getDay() === 0;
+                const holiday = getKoreanHoliday(shift.date);
+                const palette = getShiftColorPalette(shift, presetMap);
 
                 return (
                   <div
                     key={shift.id}
                     onClick={() => setSelectedDate(shift.date)}
-                    className="p-3 rounded-xl bg-[#faf8ff] hover:bg-[#f2f3ff] border border-[#eaedff] flex items-center justify-between gap-3 transition-all"
+                    className="p-3 rounded-xl bg-[#faf8ff] hover:bg-[#f2f3ff] border border-[#eaedff] flex items-center justify-between gap-3 transition-all cursor-pointer"
                   >
                     {/* Left: Date & Type */}
                     <div className="flex items-center gap-3 min-w-0">
@@ -922,7 +1044,7 @@ export const CalendarView: React.FC = () => {
                         <span className="text-[10px] text-[#737686]">{m}월</span>
                         <span
                           className={`text-sm font-extrabold ${
-                            isSun ? 'text-[#ad0033]' : isSat ? 'text-[#004ac6]' : 'text-[#131b2e]'
+                            holiday || isSun ? 'text-[#b30026]' : isSat ? 'text-[#004ac6]' : 'text-[#131b2e]'
                           }`}
                         >
                           {d} ({dayName})
@@ -932,14 +1054,19 @@ export const CalendarView: React.FC = () => {
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-xs font-bold ${
-                              shift.type === 'leave'
-                                ? 'bg-[#ffdadb] text-[#ad0033]'
-                                : 'bg-[#dbe1ff] text-[#004ac6]'
-                            }`}
+                            className="px-2 py-0.5 rounded text-xs font-bold"
+                            style={{
+                              backgroundColor: palette.softBgHex,
+                              color: palette.hex,
+                            }}
                           >
                             {shift.name}
                           </span>
+                          {holiday && (
+                            <span className="px-2 py-0.5 rounded bg-[#ffebee] border border-[#ffcdd2] text-[#b30026] text-[10px] font-extrabold">
+                              🔴 {holiday.name}
+                            </span>
+                          )}
                           <span className="text-xs font-semibold text-[#131b2e] truncate">
                             {activeWorkplace.name}
                           </span>
@@ -1021,11 +1148,43 @@ export const CalendarView: React.FC = () => {
         </section>
       )}
 
-      {/* 4. Selected Date Details Card */}
-      <section className="bg-white rounded-2xl p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-2.5 relative">
+      {/* 4. Selected Date Details Card (Matched to Preset Color Theme & Holiday Highlight) */}
+      <section
+        style={{
+          borderColor: selectedShift
+            ? selectedDatePalette.hex + '40'
+            : selectedDateHoliday
+            ? '#b3002650'
+            : '#c3c6d740',
+        }}
+        className="bg-white rounded-2xl p-4 shadow-sm border flex flex-col gap-2.5 relative transition-all"
+      >
+        {/* Public Holiday Banner if Selected Date is a holiday */}
+        {selectedDateHoliday && (
+          <div className="p-3 rounded-xl bg-[#ffebee] border border-[#ffcdd2] flex items-center justify-between text-xs text-[#b30026] font-bold animate-in fade-in flex-wrap gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[20px] text-[#b30026]">celebration</span>
+              <span className="text-sm font-extrabold">법정 공휴일: {selectedDateHoliday.name}</span>
+            </div>
+            <span className="text-[11px] font-semibold text-[#b30026] px-2 py-0.5 rounded bg-white/80 border border-[#ffcdd2]">
+              휴일근로 가산수당(1.5배) 규정 적용 대상
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full bg-[#dbe1ff] text-[#004ac6] text-xs font-bold">
+            {/* Color-matched Selected Date Badge */}
+            <span
+              className="px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-xs"
+              style={{
+                backgroundColor: selectedDateHoliday
+                  ? '#b30026'
+                  : selectedShift
+                  ? selectedDatePalette.hex
+                  : '#004ac6',
+              }}
+            >
               선택일
             </span>
             <span className="text-base font-bold text-[#131b2e]">{selectedDateFormatted} 근무 상세</span>
@@ -1056,12 +1215,21 @@ export const CalendarView: React.FC = () => {
           </div>
         </div>
 
-        {/* Shift Details Box */}
+        {/* Shift Details Box (Styled with the preset theme color!) */}
         {selectedShift ? (
-          <div className="bg-[#f2f3ff] rounded-xl p-3.5 flex flex-col gap-2">
+          <div
+            style={{
+              backgroundColor: selectedDatePalette.softBgHex + '25',
+              borderColor: selectedDatePalette.hex + '30',
+            }}
+            className="rounded-xl p-3.5 flex flex-col gap-2 border"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#004ac6] text-[20px]">
+                <span
+                  className="material-symbols-outlined text-[20px]"
+                  style={{ color: selectedDatePalette.hex }}
+                >
                   {selectedShift.type === 'leave'
                     ? 'beach_access'
                     : selectedShift.name.includes('연구')
@@ -1072,7 +1240,13 @@ export const CalendarView: React.FC = () => {
                   {activeWorkplace.name} · {selectedShift.name}
                 </span>
               </div>
-              <span className="px-2 py-0.5 rounded bg-[#6ffbbe]/40 text-[#00714d] text-xs font-bold">
+              <span
+                className="px-2 py-0.5 rounded text-xs font-bold"
+                style={{
+                  backgroundColor: selectedDatePalette.softBgHex,
+                  color: selectedDatePalette.hex,
+                }}
+              >
                 {selectedShift.status === 'completed' ? '출근 완료' : '예정'}
               </span>
             </div>
@@ -1086,9 +1260,12 @@ export const CalendarView: React.FC = () => {
             </div>
 
             {/* Wage Highlight Row */}
-            <div className="flex items-center justify-between pt-2 mt-1 bg-white/90 rounded-lg px-3 py-2 border border-[#eaedff]">
+            <div className="flex items-center justify-between pt-2 mt-1 bg-white rounded-lg px-3 py-2 border border-[#eaedff]">
               <span className="text-xs font-medium text-[#434655]">일 예상 급여</span>
-              <span className="text-base font-extrabold text-[#004ac6]">
+              <span
+                className="text-base font-extrabold"
+                style={{ color: selectedDatePalette.hex }}
+              >
                 {formatKRW(selectedShiftCalc?.totalShiftPay || 0)}원
               </span>
             </div>
@@ -1169,6 +1346,7 @@ export const CalendarView: React.FC = () => {
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5 pt-0.5">
           {presets.map((preset) => {
             const isSelectedForStamp = quickStampPresetId === preset.id;
+            const presetPal = PRESET_COLOR_PALETTES[preset.colorTheme || preset.badgeTheme] || PRESET_COLOR_PALETTES.blue;
             return (
               <button
                 key={preset.id}
@@ -1181,12 +1359,23 @@ export const CalendarView: React.FC = () => {
                 }}
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-left cursor-grab active:scale-95 transition-all ${
                   isSelectedForStamp
-                    ? 'bg-white border-2 border-[#004ac6] ring-2 ring-[#004ac6]/20 shadow-xs'
+                    ? 'bg-white border-2 shadow-xs ring-2'
                     : 'bg-[#f2f3ff] hover:bg-[#eaedff] border border-transparent'
                 }`}
+                style={
+                  isSelectedForStamp
+                    ? {
+                        borderColor: presetPal.hex,
+                        boxShadow: `0 0 0 2px ${presetPal.hex}25`,
+                      }
+                    : undefined
+                }
                 type="button"
               >
-                <div className="flex items-center text-[#004ac6]">
+                <div
+                  className="flex items-center"
+                  style={{ color: presetPal.hex }}
+                >
                   <span className="material-symbols-outlined text-[15px] text-[#737686] opacity-60">
                     drag_indicator
                   </span>
@@ -1198,7 +1387,10 @@ export const CalendarView: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <span className="text-xs font-bold text-[#131b2e]">{preset.name}</span>
                     {isSelectedForStamp && (
-                      <span className="text-[9px] px-1 rounded bg-[#004ac6] text-white font-bold">
+                      <span
+                        className="text-[9px] px-1 rounded text-white font-bold"
+                        style={{ backgroundColor: presetPal.hex }}
+                      >
                         활성
                       </span>
                     )}
@@ -1237,7 +1429,7 @@ export const CalendarView: React.FC = () => {
             <span className="material-symbols-outlined text-[18px]">add_circle_outline</span>
             <div className="flex flex-col">
               <span className="text-xs font-bold text-[#004ac6]">새 프리셋 추가</span>
-              <span className="text-[10px] text-[#434655]">시간/시급 설정</span>
+              <span className="text-[10px] text-[#434655]">시간/색상 설정</span>
             </div>
           </button>
         </div>
