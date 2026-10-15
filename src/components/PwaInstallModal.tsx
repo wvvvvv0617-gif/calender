@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useShift } from '../context/ShiftContext';
 
 export const PwaInstallModal: React.FC = () => {
-  const { isPwaModalOpen, closePwaModal, triggerPwaInstall, isInstallable, showToast } = useShift();
+  const { isPwaModalOpen, closePwaModal, triggerPwaInstall, isInstallable, isInstalled, showToast } = useShift();
   const [activeGuideTab, setActiveGuideTab] = useState<'galaxy' | 'iphone' | 'pc'>('galaxy');
   const [liveUrl, setLiveUrl] = useState<string>('');
 
@@ -358,7 +358,17 @@ export const PwaInstallModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: One-Click PWA Install (if browser supports beforeinstallprompt) */}
+          {/* Section 2: One-Click PWA Install Status & Actions */}
+          {isInstalled && (
+            <div className="p-3 bg-[#6cf8bb]/30 rounded-2xl border border-[#006c49]/30 flex items-center gap-2.5 text-[#006c49]">
+              <span className="material-symbols-outlined text-[24px]">verified</span>
+              <div>
+                <div className="text-xs font-bold">ShiftMate가 홈 화면에 이미 설치되어 있습니다!</div>
+                <div className="text-[11px] text-[#005236]">기기 바탕화면 아이콘을 통해 전체화면 단독 앱으로 언제든 실행됩니다.</div>
+              </div>
+            </div>
+          )}
+
           {isInstallable && (
             <button
               onClick={triggerPwaInstall}
@@ -368,6 +378,17 @@ export const PwaInstallModal: React.FC = () => {
               <span className="material-symbols-outlined text-[20px]">download</span>
               <span>📱 지금 기기에 1초 만에 앱 설치하기</span>
             </button>
+          )}
+
+          {!isInstallable && !isInstalled && (
+            <div className="p-3 bg-[#eaedff] rounded-2xl border border-[#c3c6d7]/40 flex items-start gap-2.5 text-[#131b2e]">
+              <span className="material-symbols-outlined text-[20px] text-[#004ac6] shrink-0 mt-0.5">info</span>
+              <div className="text-[11.5px] leading-relaxed">
+                <span className="font-bold text-[#004ac6] block mb-0.5">💡 앱 설치 방법 안내</span>
+                현재 AI Studio 미리보기 내부에서는 보안 규정으로 인해 브라우저의 <strong>[앱 설치]</strong> 팝업이 차단됩니다.
+                위의 <strong>[새 창에서 앱 바로 열기]</strong>를 누르시거나 URL을 복사하여 모바일 브라우저(크롬/삼성인터넷)에서 접속하시면 <strong>즉시 앱 설치가 활성화</strong>됩니다!
+              </div>
+            </div>
           )}
 
           {/* Section 3: Device-Specific Add to Home Screen Guide (홈 화면에 추가 가이드) */}

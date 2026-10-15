@@ -37,6 +37,7 @@ interface ShiftContextType {
   activeWorkplace: Workplace;
   updateWorkplace: (updated: Partial<Workplace>) => void;
   addNewWorkplace: (wp: Omit<Workplace, 'id'>) => void;
+  deleteWorkplace: (id: string) => boolean;
   setActiveWorkplaceId: (id: string) => void;
 
   // Presets
@@ -120,6 +121,7 @@ interface ShiftContextType {
   closePwaModal: () => void;
   triggerPwaInstall: () => void;
   isInstallable: boolean;
+  isInstalled: boolean;
 
   // Toast
   toastMessage: string | null;
@@ -298,24 +300,49 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
+    // Detect standalone PWA mode (already installed on homescreen)
+    const checkStandalone = () => {
+      if (typeof window === 'undefined') return;
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+      setIsInstalled(isStandalone);
+    };
+
+    checkStandalone();
+
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
       setIsInstallable(true);
     };
 
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+      showToast('🎉 ShiftMate가 홈 화면에 성공적으로 설치되었습니다!');
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   const triggerPwaInstall = () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
       deferredPrompt.userChoice.then((choiceResult: any) => {
-        if (choiceResult.outcome === 'accepted') {
+        if (choiceResult && choiceResult.outcome === 'accepted') {
           showToast('앱이 기기에 성공적으로 설치되었습니다!');
+          setIsInstalled(true);
         }
         setDeferredPrompt(null);
         setIsInstallable(false);
@@ -447,6 +474,29 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setWorkplaces((prev) => [...prev, newWp]);
     setActiveWorkplaceId(newId);
     showToast(`새 근무처 '${newWp.name}'이(가) 등록되었습니다.`);
+  };
+
+  const deleteWorkplace = (id: string): boolean => {
+    if (workplaces.length <= 1) {
+      showToast('⚠️ 최소 1개의 근무처는 등록되어 있어야 하므로 삭제할 수 없습니다.');
+      return false;
+    }
+    const target = workplaces.find((w) => w.id === id);
+    const targetName = target ? target.name : '근무처';
+
+    const remaining = workplaces.filter((w) => w.id !== id);
+    setWorkplaces(remaining);
+
+    // If currently selected workplace was deleted, switch active to the first remaining one
+    if (activeWorkplaceId === id) {
+      setActiveWorkplaceId(remaining[0].id);
+    }
+
+    // Clean up shifts tied to this deleted workplace
+    setShifts((prev) => prev.filter((s) => s.workplaceId !== id));
+
+    showToast(`'${targetName}' 근무처가 삭제되었습니다.`);
+    return true;
   };
 
   // Preset actions
@@ -704,6 +754,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         activeWorkplace,
         updateWorkplace,
         addNewWorkplace,
+        deleteWorkplace,
         setActiveWorkplaceId,
         presets,
         addPreset,
@@ -765,6 +816,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         closePwaModal,
         triggerPwaInstall,
         isInstallable,
+        isInstalled,
         toastMessage,
         showToast,
         currentMonthlySummary,

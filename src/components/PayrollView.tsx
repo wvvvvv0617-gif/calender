@@ -236,10 +236,17 @@ export const PayrollView: React.FC = () => {
             <span className="material-symbols-outlined text-[16px]">schedule</span>
             <span className="text-[11px] font-medium">총 시간</span>
           </div>
-          <p className="text-base font-bold text-[#131b2e] mt-1.5">
-            {currentMonthlySummary.totalWorkedHours}
-            <span className="text-xs text-[#434655] font-normal ml-0.5">h</span>
-          </p>
+          <div>
+            <p className="text-base font-bold text-[#131b2e] mt-1.5">
+              {currentMonthlySummary.totalWorkedHours}
+              <span className="text-xs text-[#434655] font-normal ml-0.5">h</span>
+            </p>
+            {currentMonthlySummary.totalOvertimeHours > 0 && (
+              <span className="text-[10px] text-[#b35300] font-bold block leading-tight">
+                연장 {currentMonthlySummary.totalOvertimeHours}h 포함
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20">
@@ -361,10 +368,36 @@ export const PayrollView: React.FC = () => {
           </div>
         </div>
 
-        {/* Night / Overtime Allowance */}
+        {/* Overtime (추가근무) Allowance */}
         <div className="p-4 rounded-2xl bg-white shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-[#131b2e]">야간 · 연장 가산수당</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-[#131b2e]">추가근무 (연장근로) 수당</span>
+              {currentMonthlySummary.totalOvertimeHours > 0 && (
+                <span className="px-1.5 py-0.2 rounded bg-[#ffeed9] text-[#b35300] text-[10px] font-extrabold">
+                  총 {currentMonthlySummary.totalOvertimeHours}시간
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-[#434655]">
+              {currentMonthlySummary.totalOvertimeHours > 0
+                ? `정규 시간 외 추가근무분 (1.5배 가산 포함)`
+                : `추가근무 시간 설정 시 1.5배 가산 자동 정산`}
+            </span>
+          </div>
+          <span
+            className={`text-base font-bold ${
+              currentMonthlySummary.overtimePay > 0 ? 'text-[#b35300]' : 'text-[#131b2e]'
+            }`}
+          >
+            +{formatKRW(currentMonthlySummary.overtimePay)}원
+          </span>
+        </div>
+
+        {/* Night Allowance */}
+        <div className="p-4 rounded-2xl bg-white shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-[#131b2e]">야간 가산수당</span>
             <span className="text-xs text-[#434655]">22시 이후 마감 근무 (시간분 × 1.5배)</span>
           </div>
           <span className="text-base font-bold text-[#131b2e]">

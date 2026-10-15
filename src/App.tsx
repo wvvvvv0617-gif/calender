@@ -21,8 +21,29 @@ import { TermsModal } from './components/TermsModal';
 const MainLayout: React.FC = () => {
   const { activeTab, toastMessage } = useShift();
 
+  // Prevent native browser long-press copy context menus on UI text/elements (Native App experience)
+  React.useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('.allow-context-menu') ||
+          target.closest('.selectable-text'))
+      ) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased selection:bg-[#dbe1ff] selection:text-[#00174b]">
+    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased">
       {/* Top Application Bar */}
       <Header />
 

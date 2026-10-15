@@ -41,12 +41,22 @@ export const PdfExportModal: React.FC = () => {
             ? `<span style="background:#ffdadb;color:#ad0033;padding:2px 6px;border-radius:4px;font-weight:bold;font-size:11px;">${s.leaveType || '휴무'}</span>`
             : `<span style="background:#dbe1ff;color:#004ac6;padding:2px 6px;border-radius:4px;font-weight:bold;font-size:11px;">${s.name}</span>`;
 
+        const otBadge =
+          s.overtimeHours && s.overtimeHours > 0
+            ? `<span style="background:#ffeed9;color:#b35300;padding:2px 5px;border-radius:4px;font-size:10px;margin-left:4px;font-weight:bold;">+${s.overtimeHours}h 연장</span>`
+            : '';
+
+        const workHourText =
+          s.overtimeHours && s.overtimeHours > 0
+            ? `${calc.workedHours}시간<br><small style="color:#b35300;font-size:10px;">(기본 ${calc.regularHours}h + 연장 ${s.overtimeHours}h)</small>`
+            : `${calc.workedHours}시간`;
+
         return `<tr>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;">${s.date}</td>
-          <td style="padding:8px 10px;border-bottom:1px solid #eaedff;">${typeBadge}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #eaedff;">${typeBadge}${otBadge}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;color:#434655;">${s.type === 'work' ? `${s.startTime} ~ ${s.endTime}` : '-'}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:center;color:#434655;">${s.breakMinutes}분</td>
-          <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:right;font-weight:bold;">${calc.workedHours}시간</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:right;font-weight:bold;">${workHourText}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:right;font-weight:bold;color:#131b2e;">${formatKRW(calc.totalShiftPay)}원</td>
         </tr>`;
       })
@@ -222,7 +232,11 @@ export const PdfExportModal: React.FC = () => {
 
       <div class="summary-card">
         <span>총 출근 일수: ${currentMonthlySummary.totalWorkDays}일</span>
-        <span>총 실근로: ${currentMonthlySummary.totalWorkedHours}시간</span>
+        <span>총 실근로: ${currentMonthlySummary.totalWorkedHours}시간${
+          currentMonthlySummary.totalOvertimeHours > 0
+            ? ` (연장 ${currentMonthlySummary.totalOvertimeHours}h 포함)`
+            : ''
+        }</span>
         <span style="color:#004ac6;font-size:16px;">총 예상 수령액: ${formatKRW(currentMonthlySummary.netPay)}원</span>
       </div>
       `
@@ -232,8 +246,13 @@ export const PdfExportModal: React.FC = () => {
           <div style="color:#004ac6;font-weight:bold;font-size:13px;margin-bottom:10px;border-bottom:1px solid #c3c6d7;padding-bottom:6px;">지급 내역 (세전)</div>
           <div style="font-size:13px;line-height:2;">
             <div style="display:flex;justify-content:space-between;"><span>기본급여</span><b>${formatKRW(currentMonthlySummary.basePay)}원</b></div>
+            ${
+              currentMonthlySummary.overtimePay > 0
+                ? `<div style="display:flex;justify-content:space-between;color:#b35300;"><span>추가근무(연장 ${currentMonthlySummary.totalOvertimeHours}h)</span><b>+${formatKRW(currentMonthlySummary.overtimePay)}원</b></div>`
+                : ''
+            }
             <div style="display:flex;justify-content:space-between;color:#006c49;"><span>주휴수당 (4주)</span><b>+${formatKRW(currentMonthlySummary.weeklyHolidayPay)}원</b></div>
-            <div style="display:flex;justify-content:space-between;"><span>야간·연장 가산</span><b>+${formatKRW(currentMonthlySummary.nightOvertimePay)}원</b></div>
+            <div style="display:flex;justify-content:space-between;"><span>야간 가산수당</span><b>+${formatKRW(currentMonthlySummary.nightOvertimePay)}원</b></div>
             <div style="border-top:1px solid #c3c6d7;margin-top:8px;padding-top:6px;display:flex;justify-content:space-between;font-weight:bold;">
               <span>총 지급 소계</span><span>${formatKRW(currentMonthlySummary.grossPay)}원</span>
             </div>
@@ -282,7 +301,7 @@ export const PdfExportModal: React.FC = () => {
         </div>
       </div>
       <div class="sig-box">
-        <div style="color:#737686;">사업주 (대표) 확인</div>
+        <div style="color:#737686;">팀장확인</div>
         <div style="height:32px;display:flex;align-items:center;justify-content:center;font-weight:bold;margin-top:8px;">
           ${activeWorkplace.name} (인 또는 서명)
         </div>
@@ -450,15 +469,22 @@ export const PdfExportModal: React.FC = () => {
                         <tr key={s.id} className="hover:bg-[#faf8ff]">
                           <td className="py-2 px-2.5 font-medium">{s.date}</td>
                           <td className="py-2 px-2.5">
-                            <span
-                              className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
-                                s.type === 'leave'
-                                  ? 'bg-[#ffdadb] text-[#ad0033]'
-                                  : 'bg-[#dbe1ff] text-[#004ac6]'
-                              }`}
-                            >
-                              {s.name}
-                            </span>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span
+                                className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
+                                  s.type === 'leave'
+                                    ? 'bg-[#ffdadb] text-[#ad0033]'
+                                    : 'bg-[#dbe1ff] text-[#004ac6]'
+                                }`}
+                              >
+                                {s.name}
+                              </span>
+                              {s.overtimeHours && s.overtimeHours > 0 ? (
+                                <span className="px-1.5 py-0.2 rounded font-extrabold text-[9px] bg-[#ffeed9] text-[#b35300] border border-[#ffdbb8]">
+                                  +{s.overtimeHours}h 연장
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="py-2 px-2.5 text-[#434655]">
                             {s.type === 'work' ? `${s.startTime} ~ ${s.endTime}` : '-'}
@@ -467,7 +493,12 @@ export const PdfExportModal: React.FC = () => {
                             {s.breakMinutes}분
                           </td>
                           <td className="py-2 px-2.5 text-right font-bold">
-                            {calc.workedHours}시간
+                            <div>{calc.workedHours}시간</div>
+                            {s.overtimeHours && s.overtimeHours > 0 ? (
+                              <div className="text-[10px] text-[#b35300] font-normal">
+                                (연장 {s.overtimeHours}h)
+                              </div>
+                            ) : null}
                           </td>
                           <td className="py-2 px-2.5 text-right font-bold text-[#131b2e]">
                             {formatKRW(calc.totalShiftPay)}원
@@ -486,9 +517,14 @@ export const PdfExportModal: React.FC = () => {
               </table>
 
               {/* Timesheet Summary Totals */}
-              <div className="bg-[#f2f3ff] p-4 rounded-xl flex items-center justify-between text-xs font-bold border border-[#c3c6d7]/30">
+              <div className="bg-[#f2f3ff] p-4 rounded-xl flex items-center justify-between text-xs font-bold border border-[#c3c6d7]/30 flex-wrap gap-2">
                 <span>총 출근 일수: {currentMonthlySummary.totalWorkDays}일</span>
-                <span>총 실근로: {currentMonthlySummary.totalWorkedHours}시간</span>
+                <span>
+                  총 실근로: {currentMonthlySummary.totalWorkedHours}시간
+                  {currentMonthlySummary.totalOvertimeHours > 0
+                    ? ` (연장 ${currentMonthlySummary.totalOvertimeHours}h 포함)`
+                    : ''}
+                </span>
                 <span className="text-sm text-[#004ac6]">
                   총 예상 수령액: {formatKRW(currentMonthlySummary.netPay)}원
                 </span>
@@ -509,6 +545,14 @@ export const PdfExportModal: React.FC = () => {
                       <span className="text-[#434655]">기본급여</span>
                       <span className="font-bold">{formatKRW(currentMonthlySummary.basePay)}원</span>
                     </div>
+                    {currentMonthlySummary.overtimePay > 0 && (
+                      <div className="flex justify-between text-[#b35300]">
+                        <span>추가근무(연장 {currentMonthlySummary.totalOvertimeHours}h)</span>
+                        <span className="font-bold">
+                          +{formatKRW(currentMonthlySummary.overtimePay)}원
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-[#434655]">주휴수당 (4주 충족)</span>
                       <span className="font-bold text-[#006c49]">
@@ -516,7 +560,7 @@ export const PdfExportModal: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#434655]">야간·연장 가산수당</span>
+                      <span className="text-[#434655]">야간 가산수당</span>
                       <span className="font-bold">
                         +{formatKRW(currentMonthlySummary.nightOvertimePay)}원
                       </span>
@@ -598,7 +642,7 @@ export const PdfExportModal: React.FC = () => {
               </div>
             </div>
             <div className="p-3 bg-[#f2f3ff] rounded-xl text-center">
-              <span className="text-[#737686] block">사업주 (대표자) 확인</span>
+              <span className="text-[#737686] block">팀장확인</span>
               <div className="h-8 flex items-center justify-center font-bold text-[#131b2e]">
                 {activeWorkplace.name} (인 또는 서명)
               </div>

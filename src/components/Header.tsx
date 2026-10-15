@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { useShift } from '../context/ShiftContext';
+import { Workplace } from '../types';
+import { useLongPress } from '../utils/useLongPress';
+import { DeleteWorkplaceModal } from './DeleteWorkplaceModal';
 
 interface NotifItem {
   id: string;
@@ -26,6 +29,71 @@ const NOTIFICATIONS_LIST: NotifItem[] = [
   },
 ];
 
+interface WorkplaceDropdownItemProps {
+  wp: Workplace;
+  isActive: boolean;
+  onSelect: () => void;
+  onLongPressDelete: (wp: Workplace) => void;
+}
+
+const WorkplaceDropdownItem: React.FC<WorkplaceDropdownItemProps> = ({
+  wp,
+  isActive,
+  onSelect,
+  onLongPressDelete,
+}) => {
+  const bind = useLongPress({
+    threshold: 480,
+    onLongPress: () => {
+      onLongPressDelete(wp);
+    },
+    onClick: () => {
+      onSelect();
+    },
+  });
+
+  return (
+    <div
+      {...bind}
+      className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer select-none active:scale-[0.98] ${
+        isActive
+          ? 'bg-[#eaedff] text-[#004ac6] font-semibold ring-1 ring-[#004ac6]/30'
+          : 'hover:bg-[#f2f3ff] text-[#131b2e]'
+      }`}
+      title="터치하여 선택 · 꾹(길게) 누르면 삭제"
+    >
+      <div className="flex items-center gap-2 truncate">
+        <span className="text-base shrink-0">{wp.icon}</span>
+        <div className="min-w-0">
+          <span className="text-xs truncate block font-medium">{wp.name}</span>
+          <span className="text-[10px] text-[#737686] block">
+            {wp.role} · {wp.hourlyWage.toLocaleString()}원
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {isActive && (
+          <span className="material-symbols-outlined text-[16px] text-[#004ac6]">
+            check
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLongPressDelete(wp);
+          }}
+          className="opacity-60 hover:opacity-100 p-1 rounded-lg hover:bg-[#ffdad6] text-[#737686] hover:text-[#ba1a1a] transition-all"
+          title="근무처 삭제 (길게 눌러도 삭제 가능)"
+          aria-label={`${wp.name} 삭제`}
+        >
+          <span className="material-symbols-outlined text-[15px]">delete</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const Header: React.FC = () => {
   const {
     activeWorkplace,
@@ -35,6 +103,9 @@ export const Header: React.FC = () => {
     activeTab,
     setActiveTab,
     openPwaModal,
+    triggerPwaInstall,
+    isInstallable,
+    isInstalled,
     showToast,
     profileImage,
     openProfileModal,
@@ -46,6 +117,13 @@ export const Header: React.FC = () => {
 
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [wpToDelete, setWpToDelete] = useState<Workplace | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  const handleOpenDelete = (wp: Workplace) => {
+    setWpToDelete(wp);
+    setIsDeleteModalOpen(true);
+  };
 
   // Unread notifications check
   const unreadNotifs = NOTIFICATIONS_LIST.filter(
@@ -101,35 +179,27 @@ export const Header: React.FC = () => {
                   className="fixed inset-0 z-30"
                   onClick={() => setIsStoreDropdownOpen(false)}
                 />
-                <div className="absolute left-0 mt-1.5 w-72 bg-white rounded-2xl shadow-xl border border-[#c3c6d7]/30 p-2 z-40 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-2 py-1.5 text-[11px] font-bold text-[#737686] uppercase tracking-wider flex items-center justify-between">
-                    <span>등록된 근무처 목록</span>
-                    <span className="text-[10px] text-[#006c49] font-bold">실시간 저장됨</span>
+                <div className="absolute left-0 top-full mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-xl border border-[#c3c6d7]/30 p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-2.5 py-1.5 text-[11px] font-bold text-[#737686] uppercase tracking-wider flex items-center justify-between border-b border-[#eaedff]">
+                    <span>근무처 목록</span>
+                    <span className="text-[10px] text-[#004ac6] font-semibold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-[13px]">touch_app</span>
+                      <span>꾹 눌러서 삭제</span>
+                    </span>
                   </div>
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                  <div className="space-y-1 max-h-56 overflow-y-auto pt-1">
                     {workplaces.map((wp) => (
-                      <button
+                      <WorkplaceDropdownItem
                         key={wp.id}
-                        onClick={() => {
+                        wp={wp}
+                        isActive={wp.id === activeWorkplace.id}
+                        onSelect={() => {
                           setActiveWorkplaceId(wp.id);
                           setIsStoreDropdownOpen(false);
                           showToast(`'${wp.name}' 근무처로 변경되었습니다.`);
                         }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
-                          wp.id === activeWorkplace.id
-                            ? 'bg-[#eaedff] text-[#004ac6] font-semibold'
-                            : 'hover:bg-[#f2f3ff] text-[#131b2e]'
-                        }`}
-                      >
-                        <span className="text-sm truncate">
-                          {wp.icon} {wp.name}
-                        </span>
-                        {wp.id === activeWorkplace.id && (
-                          <span className="material-symbols-outlined text-[16px] text-[#004ac6]">
-                            check
-                          </span>
-                        )}
-                      </button>
+                        onLongPressDelete={handleOpenDelete}
+                      />
                     ))}
                   </div>
 
@@ -212,15 +282,33 @@ export const Header: React.FC = () => {
         {/* Right: Download App, Notifications & Profile */}
         <div className="flex items-center gap-1.5 shrink-0">
           {/* PWA Install & Shortcut Button */}
-          <button
-            onClick={openPwaModal}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#004ac6] text-white hover:bg-[#003ea8] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
-            type="button"
-            title="스마트폰 홈화면에 앱 설치 및 사이트 바로 접속"
-          >
-            <span className="material-symbols-outlined text-[16px]">install_mobile</span>
-            <span className="text-[11px] sm:text-xs">홈화면 설치</span>
-          </button>
+          {isInstalled ? (
+            <button
+              onClick={openPwaModal}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#6cf8bb]/30 text-[#006c49] border border-[#006c49]/20 text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+              type="button"
+              title="ShiftMate PWA 앱으로 실행 중입니다 (클릭 시 바로가기 관리)"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#006c49]">check_circle</span>
+              <span className="text-[11px] sm:text-xs">앱 실행 중</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (isInstallable) {
+                  triggerPwaInstall();
+                } else {
+                  openPwaModal();
+                }
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#004ac6] text-white hover:bg-[#003ea8] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+              type="button"
+              title="스마트폰 홈화면에 앱 설치 및 사이트 바로 접속"
+            >
+              <span className="material-symbols-outlined text-[16px]">install_mobile</span>
+              <span className="text-[11px] sm:text-xs">{isInstallable ? '앱 설치하기' : '홈화면 설치'}</span>
+            </button>
+          )}
 
           {/* Notifications button with Red Dot disappearing on read */}
           <div className="relative">
@@ -322,6 +410,13 @@ export const Header: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Workplace Long-Press Delete Confirmation Modal */}
+      <DeleteWorkplaceModal
+        workplace={wpToDelete}
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+      />
     </header>
   );
 };

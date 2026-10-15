@@ -38,6 +38,10 @@ export const AddShiftView: React.FC = () => {
   const [hasNightBonus, setHasNightBonus] = useState<boolean>(false);
   const [hasSubstituteBonus, setHasSubstituteBonus] = useState<boolean>(false);
 
+  // Overtime state (추가근무 / 연장근로)
+  const [overtimeHours, setOvertimeHours] = useState<number>(0);
+  const [hasOvertimeBonus, setHasOvertimeBonus] = useState<boolean>(true); // 기본 1.5배 가산
+
   // Leave state
   const [selectedLeaveType, setSelectedLeaveType] = useState<LeaveType>('연차');
   const [customLeaveTitle, setCustomLeaveTitle] = useState<string>('정기 연차 휴가');
@@ -57,6 +61,8 @@ export const AddShiftView: React.FC = () => {
         setHasWeeklyHolidayPay(existingShiftOnDate.hasWeeklyHolidayPay);
         setHasNightBonus(existingShiftOnDate.hasNightBonus);
         setHasSubstituteBonus(existingShiftOnDate.hasSubstituteBonus);
+        setOvertimeHours(existingShiftOnDate.overtimeHours || 0);
+        setHasOvertimeBonus(existingShiftOnDate.hasOvertimeBonus !== false);
         if (existingShiftOnDate.presetId) {
           setSelectedPresetId(existingShiftOnDate.presetId);
         }
@@ -67,7 +73,11 @@ export const AddShiftView: React.FC = () => {
         setIsPaidLeave(!!existingShiftOnDate.isPaidLeave);
         setRecognizedHours(existingShiftOnDate.recognizedHours || 8);
         setLeaveMemo(existingShiftOnDate.memo || '');
+        setOvertimeHours(0);
       }
+    } else {
+      setOvertimeHours(0);
+      setHasOvertimeBonus(true);
     }
   }, [existingShiftOnDate]);
 
@@ -125,8 +135,9 @@ export const AddShiftView: React.FC = () => {
     let base = Math.round(workedHours * hourlyWage);
     let night = hasNightBonus && nightHours > 0 ? Math.round(nightHours * hourlyWage * 0.5) : 0;
     let sub = hasSubstituteBonus ? Math.round(workedHours * hourlyWage * 0.2) : 0;
-    return base + night + sub;
-  }, [activeTabMode, isPaidLeave, recognizedHours, hourlyWage, workedHours, nightHours, hasNightBonus, hasSubstituteBonus]);
+    let ot = overtimeHours > 0 ? Math.round(overtimeHours * hourlyWage * (hasOvertimeBonus ? 1.5 : 1.0)) : 0;
+    return base + night + sub + ot;
+  }, [activeTabMode, isPaidLeave, recognizedHours, hourlyWage, workedHours, nightHours, hasNightBonus, hasSubstituteBonus, overtimeHours, hasOvertimeBonus]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -150,6 +161,8 @@ export const AddShiftView: React.FC = () => {
         hasWeeklyHolidayPay,
         hasNightBonus,
         hasSubstituteBonus,
+        overtimeHours,
+        hasOvertimeBonus,
       });
     } else {
       addShift({
@@ -485,6 +498,134 @@ export const AddShiftView: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Overtime (추가근무 / 연장근로) Card */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    overtimeHours > 0 ? 'bg-[#ffeed9] text-[#b35300]' : 'bg-[#f2f3ff] text-[#004ac6]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[19px]">more_time</span>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#131b2e] flex items-center gap-1.5 flex-wrap">
+                    <span>추가근무 (연장근로)</span>
+                    {overtimeHours > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-[#ffeed9] text-[#b35300] text-[10px] font-extrabold">
+                        +{overtimeHours}시간 적용중
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-[#434655]">
+                    기본 근무 외 추가로 일한 시간을 설정하세요
+                  </div>
+                </div>
+              </div>
+
+              {/* Stepper controls */}
+              <div className="flex items-center gap-1.5 bg-[#f2f3ff] p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setOvertimeHours((prev) => Math.max(0, Math.round((prev - 0.5) * 10) / 10))}
+                  disabled={overtimeHours <= 0}
+                  className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-[#131b2e] active:scale-95 shadow-xs font-bold disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                  title="0.5시간 감소"
+                >
+                  -
+                </button>
+                <div className="flex items-baseline px-2 min-w-[58px] justify-center text-center">
+                  <span className={`text-sm font-extrabold ${overtimeHours > 0 ? 'text-[#b35300]' : 'text-[#131b2e]'}`}>
+                    {overtimeHours}
+                  </span>
+                  <span className="text-[11px] text-[#737686] font-medium ml-0.5">시간</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOvertimeHours((prev) => Math.min(24, Math.round((prev + 0.5) * 10) / 10))}
+                  className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-[#131b2e] active:scale-95 shadow-xs font-bold cursor-pointer"
+                  title="0.5시간 추가"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Overtime Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#eaedff]">
+              <span className="text-[11px] font-medium text-[#737686] shrink-0 mr-0.5">빠른 설정:</span>
+              {[
+                { label: '없음 (0h)', val: 0 },
+                { label: '+30분 (0.5h)', val: 0.5 },
+                { label: '+1시간', val: 1 },
+                { label: '+1.5시간', val: 1.5 },
+                { label: '+2시간', val: 2 },
+                { label: '+3시간', val: 3 },
+              ].map((chip) => {
+                const isSelected = overtimeHours === chip.val;
+                return (
+                  <button
+                    key={chip.val}
+                    type="button"
+                    onClick={() => setOvertimeHours(chip.val)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                      isSelected
+                        ? chip.val > 0
+                          ? 'bg-[#b35300] text-white shadow-xs'
+                          : 'bg-[#004ac6] text-white shadow-xs'
+                        : 'bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff]'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Overtime Pay Multiplier & Live Breakdown (shown when overtimeHours > 0) */}
+            {overtimeHours > 0 && (
+              <div className="mt-1 p-3 rounded-xl bg-[#fff8f2] border border-[#ffdbb8] flex flex-col gap-2 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-[#131b2e]">법정 연장가산수당 (1.5배)</span>
+                      <span className="px-1.5 py-0.2 rounded bg-[#ffdbb8] text-[#8f4200] text-[10px] font-bold">
+                        근로기준법 기준
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-[#633f17]">
+                      {hasOvertimeBonus
+                        ? `통상시급의 150% 적용 (${formatKRW(Math.round(hourlyWage * 1.5))}원/시간)`
+                        : `기본시급 100% 적용 (${formatKRW(hourlyWage)}원/시간)`}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => setHasOvertimeBonus(!hasOvertimeBonus)}
+                    className={`w-11 h-6 rounded-full relative p-0.5 transition-colors cursor-pointer ${
+                      hasOvertimeBonus ? 'bg-[#b35300]' : 'bg-[#e2e7ff]'
+                    }`}
+                    type="button"
+                  >
+                    <div
+                      className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
+                        hasOvertimeBonus ? 'ml-auto' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-[#ffebd6] text-xs">
+                  <span className="text-[#633f17] font-medium">추가근무 수당 합산액</span>
+                  <span className="text-sm font-black text-[#b35300]">
+                    +{formatKRW(Math.round(overtimeHours * hourlyWage * (hasOvertimeBonus ? 1.5 : 1.0)))}원
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Allowances Toggles Card */}

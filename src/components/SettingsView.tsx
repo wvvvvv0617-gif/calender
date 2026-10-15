@@ -1,8 +1,90 @@
 import React, { useState } from 'react';
 import { useShift } from '../context/ShiftContext';
 import { formatKRW } from '../utils/calculations';
-import { PaydayOption } from '../types';
+import { PaydayOption, Workplace } from '../types';
 import { WORKPLACE_ICON_CATEGORIES } from '../utils/sampleData';
+import { useLongPress } from '../utils/useLongPress';
+import { DeleteWorkplaceModal } from './DeleteWorkplaceModal';
+
+interface WorkplaceSettingsCardProps {
+  wp: Workplace;
+  isActive: boolean;
+  onSelect: () => void;
+  onLongPressDelete: (wp: Workplace) => void;
+}
+
+const WorkplaceSettingsCard: React.FC<WorkplaceSettingsCardProps> = ({
+  wp,
+  isActive,
+  onSelect,
+  onLongPressDelete,
+}) => {
+  const bind = useLongPress({
+    threshold: 480,
+    onLongPress: () => {
+      onLongPressDelete(wp);
+    },
+    onClick: () => {
+      onSelect();
+    },
+  });
+
+  return (
+    <div
+      {...bind}
+      className={`group relative p-3 rounded-2xl border transition-all cursor-pointer select-none active:scale-[0.98] ${
+        isActive
+          ? 'bg-[#eaedff] border-[#004ac6] shadow-xs ring-1 ring-[#004ac6]/30'
+          : 'bg-white border-[#c3c6d7]/40 hover:border-[#004ac6]/40 hover:bg-[#faf8ff]'
+      }`}
+      title="터치하여 선택 · 꾹(길게) 누르면 삭제"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-xs border border-[#c3c6d7]/30 shrink-0">
+            {wp.icon}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-[#131b2e] truncate">{wp.name}</span>
+              {isActive && (
+                <span className="text-[10px] font-extrabold bg-[#004ac6] text-white px-1.5 py-0.2 rounded-md">
+                  선택됨
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-[#434655] mt-0.5">
+              {wp.role} · {wp.hourlyWage.toLocaleString()}원
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLongPressDelete(wp);
+          }}
+          className="p-1.5 rounded-lg hover:bg-[#ffdad6] text-[#737686] hover:text-[#ba1a1a] transition-all shrink-0 cursor-pointer"
+          title="근무처 삭제 (길게 눌러도 삭제)"
+          aria-label={`${wp.name} 삭제`}
+        >
+          <span className="material-symbols-outlined text-[16px]">delete</span>
+        </button>
+      </div>
+
+      <div className="mt-2 pt-2 border-t border-[#c3c6d7]/20 flex items-center justify-between text-[10px] text-[#737686]">
+        <span className="flex items-center gap-0.5">
+          <span className="material-symbols-outlined text-[12px] text-[#004ac6]">touch_app</span>
+          <span>꾹 눌러 삭제</span>
+        </span>
+        <span className="font-semibold text-[#004ac6]">
+          {isActive ? '✓ 현재 적용 중' : '터치하여 전환'}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 export const SettingsView: React.FC = () => {
   const {
@@ -10,6 +92,7 @@ export const SettingsView: React.FC = () => {
     updateWorkplace,
     workplaces,
     addNewWorkplace,
+    setActiveWorkplaceId,
     presets,
     openPresetModal,
     deletePreset,
@@ -40,6 +123,15 @@ export const SettingsView: React.FC = () => {
   const [wpRole, setWpRole] = useState(activeWorkplace.role);
   const [wpWage, setWpWage] = useState(String(activeWorkplace.hourlyWage));
   const [customEmojiInput, setCustomEmojiInput] = useState('');
+
+  // Workplace Long-Press Delete Modal State
+  const [wpToDelete, setWpToDelete] = useState<Workplace | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  const handleOpenDelete = (wp: Workplace) => {
+    setWpToDelete(wp);
+    setIsDeleteModalOpen(true);
+  };
 
   // Notification states (D-1 as requested)
   const [shiftAlert, setShiftAlert] = useState(true);
@@ -165,11 +257,39 @@ export const SettingsView: React.FC = () => {
       </section>
 
       {/* Workplace Section */}
-      <section className="flex flex-col gap-2">
+      <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-[#131b2e]">현재 등록된 근무처</h2>
-          <span className="text-[11px] font-bold text-[#006c49] bg-[#6cf8bb]/40 px-2.5 py-0.5 rounded-full">
-            {workplaces.length}개 활성화됨 (자동 저장)
+          <div>
+            <h2 className="text-sm font-bold text-[#131b2e]">등록된 근무처 목록</h2>
+            <p className="text-[11px] text-[#434655]">
+              근무처를 터치하여 전환하고, <strong>꾹(길게) 누르면 삭제</strong>할 수 있습니다.
+            </p>
+          </div>
+          <span className="text-[11px] font-bold text-[#006c49] bg-[#6cf8bb]/40 px-2.5 py-0.5 rounded-full shrink-0">
+            {workplaces.length}개 등록됨
+          </span>
+        </div>
+
+        {/* Workplace Grid (Tap to switch, Long-press to delete) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {workplaces.map((wp) => (
+            <WorkplaceSettingsCard
+              key={wp.id}
+              wp={wp}
+              isActive={wp.id === activeWorkplace.id}
+              onSelect={() => {
+                setActiveWorkplaceId(wp.id);
+                showToast(`'${wp.name}' 근무처로 변경되었습니다.`);
+              }}
+              onLongPressDelete={handleOpenDelete}
+            />
+          ))}
+        </div>
+
+        <div className="pt-1 flex items-center justify-between">
+          <span className="text-xs font-bold text-[#131b2e] flex items-center gap-1">
+            <span className="material-symbols-outlined text-[16px] text-[#004ac6]">tune</span>
+            <span>선택된 &lsquo;{activeWorkplace.name}&rsquo; 시급 및 세부 설정</span>
           </span>
         </div>
 
@@ -863,6 +983,13 @@ export const SettingsView: React.FC = () => {
           </button>
         </div>
       </section>
+
+      {/* Workplace Long-Press Delete Modal */}
+      <DeleteWorkplaceModal
+        workplace={wpToDelete}
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+      />
     </div>
   );
 };

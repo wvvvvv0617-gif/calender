@@ -767,6 +767,11 @@ export const CalendarView: React.FC = () => {
                       >
                         {shift.type === 'leave' ? shift.leaveType || '휴무' : shift.name}
                       </span>
+                      {shift.overtimeHours && shift.overtimeHours > 0 ? (
+                        <span className="mt-0.5 block truncate px-1 py-0.2 rounded font-extrabold text-[9px] leading-tight bg-[#ffeed9] text-[#b35300] border border-[#ffdbb8]/70 text-center">
+                          +{shift.overtimeHours}h 연장
+                        </span>
+                      ) : null}
 
                       {/* Quick Delete overlay X icon on hover */}
                       <button
@@ -930,12 +935,21 @@ export const CalendarView: React.FC = () => {
 
                         {shift.type === 'work' ? (
                           <>
-                            <span className="text-[11px] text-[#434655]">
-                              {shift.startTime} ~ {shift.endTime}
-                            </span>
+                            <div className="flex items-center justify-between text-[11px] text-[#434655]">
+                              <span>
+                                {shift.startTime} ~ {shift.endTime}
+                              </span>
+                              {shift.overtimeHours && shift.overtimeHours > 0 ? (
+                                <span className="px-1.5 py-0.2 rounded font-extrabold text-[9px] bg-[#ffeed9] text-[#b35300] border border-[#ffdbb8]">
+                                  +{shift.overtimeHours}h 연장
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="flex items-center justify-between pt-1 border-t border-[#eaedff]">
                               <span className="text-[10px] text-[#737686]">
-                                {shiftCalc?.workedHours}시간
+                                {shift.overtimeHours && shift.overtimeHours > 0
+                                  ? `${shiftCalc?.workedHours}시간 (연장 ${shift.overtimeHours}h 포함)`
+                                  : `${shiftCalc?.workedHours}시간`}
                               </span>
                               <span className="text-xs font-extrabold text-[#004ac6]">
                                 {formatKRW(shiftCalc?.totalShiftPay || 0)}원
@@ -1062,6 +1076,12 @@ export const CalendarView: React.FC = () => {
                           >
                             {shift.name}
                           </span>
+                          {shift.overtimeHours && shift.overtimeHours > 0 ? (
+                            <span className="px-2 py-0.5 rounded bg-[#ffeed9] border border-[#ffdbb8] text-[#b35300] text-[10px] font-extrabold flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px]">more_time</span>
+                              <span>+{shift.overtimeHours}시간 연장 (+{formatKRW(shiftCalc.overtimePay)}원)</span>
+                            </span>
+                          ) : null}
                           {holiday && (
                             <span className="px-2 py-0.5 rounded bg-[#ffebee] border border-[#ffcdd2] text-[#b30026] text-[10px] font-extrabold">
                               🔴 {holiday.name}
@@ -1072,7 +1092,7 @@ export const CalendarView: React.FC = () => {
                           </span>
                         </div>
 
-                        <div className="text-xs text-[#434655] mt-1 flex items-center gap-2">
+                        <div className="text-xs text-[#434655] mt-1 flex items-center gap-2 flex-wrap">
                           {shift.type === 'work' ? (
                             <>
                               <span>
@@ -1080,7 +1100,9 @@ export const CalendarView: React.FC = () => {
                               </span>
                               <span>·</span>
                               <span className="font-semibold text-[#131b2e]">
-                                {shiftCalc.workedHours}시간 근무
+                                {shift.overtimeHours && shift.overtimeHours > 0
+                                  ? `실근무 ${shiftCalc.workedHours}시간 (기본 ${shiftCalc.regularHours}h + 연장 ${shift.overtimeHours}h)`
+                                  : `${shiftCalc.workedHours}시간 근무`}
                               </span>
                             </>
                           ) : (
@@ -1251,13 +1273,31 @@ export const CalendarView: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-[#434655] pt-0.5">
+            <div className="flex items-center justify-between text-xs text-[#434655] pt-0.5 flex-wrap gap-1">
               <span>
                 시간: {selectedShift.startTime} ~ {selectedShift.endTime} (
-                {selectedShiftCalc?.workedHours || 0}시간)
+                {selectedShiftCalc?.workedHours || 0}시간
+                {selectedShift.overtimeHours && selectedShift.overtimeHours > 0
+                  ? ` · 기본 ${selectedShiftCalc?.regularHours}h + 연장 ${selectedShift.overtimeHours}h`
+                  : ''}
+                )
               </span>
               <span>기본시급: {formatKRW(selectedShift.hourlyWage)}원</span>
             </div>
+
+            {/* Overtime Row in Selected Date Detail */}
+            {selectedShift.overtimeHours && selectedShift.overtimeHours > 0 ? (
+              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-[#fff8f2] border border-[#ffdbb8] text-[#b35300]">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span className="material-symbols-outlined text-[16px]">more_time</span>
+                  <span>
+                    추가근무 {selectedShift.overtimeHours}시간 (
+                    {selectedShift.hasOvertimeBonus !== false ? '1.5배 가산' : '일반 시급'} 적용)
+                  </span>
+                </div>
+                <span className="font-extrabold text-sm">+{formatKRW(selectedShiftCalc?.overtimePay || 0)}원</span>
+              </div>
+            ) : null}
 
             {/* Wage Highlight Row */}
             <div className="flex items-center justify-between pt-2 mt-1 bg-white rounded-lg px-3 py-2 border border-[#eaedff]">

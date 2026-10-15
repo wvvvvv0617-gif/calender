@@ -8,6 +8,8 @@ export const WorkplaceModal: React.FC = () => {
     closeWorkplaceModal,
     workplaceModalMode,
     activeWorkplace,
+    workplaces,
+    deleteWorkplace,
     updateWorkplace,
     addNewWorkplace,
     showToast,
@@ -20,6 +22,7 @@ export const WorkplaceModal: React.FC = () => {
   const [role, setRole] = useState('연구원');
   const [wage, setWage] = useState(10320);
   const [customEmoji, setCustomEmoji] = useState('');
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (isCreate) {
@@ -199,22 +202,62 @@ export const WorkplaceModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[#eaedff] flex items-center justify-end gap-2 bg-[#f2f3ff]">
-          <button
-            onClick={closeWorkplaceModal}
-            className="px-4 py-2 rounded-xl bg-white text-xs font-semibold text-[#131b2e] border border-[#c3c6d7]/30 hover:bg-[#eaedff] cursor-pointer"
-          >
-            취소
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-5 py-2 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-md hover:bg-[#003ea8] active:scale-95 flex items-center gap-1.5 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[16px]">
-              {isCreate ? 'add' : 'check'}
-            </span>
-            <span>{isCreate ? '새 근무처 등록하기' : '저장 완료'}</span>
-          </button>
+        <div className="p-4 border-t border-[#eaedff] flex items-center justify-between gap-2 bg-[#f2f3ff]">
+          {!isCreate && workplaces.length > 1 ? (
+            isConfirmingDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-[#ba1a1a]">정말 삭제할까요?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteWorkplace(activeWorkplace.id);
+                    closeWorkplaceModal();
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-[#ba1a1a] hover:bg-[#93000a] text-white text-xs font-bold active:scale-95 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[15px]">delete</span>
+                  <span>삭제 확인</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(false)}
+                  className="px-2.5 py-1.5 rounded-xl bg-white text-[#737686] text-xs font-semibold hover:bg-[#eaedff] cursor-pointer"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(true)}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-[#ba1a1a] hover:bg-[#ffdad6] active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                title="현재 근무처 삭제"
+              >
+                <span className="material-symbols-outlined text-[16px]">delete</span>
+                <span>근무처 삭제</span>
+              </button>
+            )
+          ) : (
+            <div />
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={closeWorkplaceModal}
+              className="px-4 py-2 rounded-xl bg-white text-xs font-semibold text-[#131b2e] border border-[#c3c6d7]/30 hover:bg-[#eaedff] cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-5 py-2 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-md hover:bg-[#003ea8] active:scale-95 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                {isCreate ? 'add' : 'check'}
+              </span>
+              <span>{isCreate ? '새 근무처 등록하기' : '저장 완료'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

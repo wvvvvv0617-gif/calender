@@ -65,6 +65,9 @@ export interface ShiftRecord {
   hasWeeklyHolidayPay: boolean;
   hasNightBonus: boolean;
   hasSubstituteBonus: boolean;
+  // Overtime work (추가근무)
+  overtimeHours?: number; // 추가근무 시간 (단위: 시간, e.g. 0.5, 1, 1.5, 2)
+  hasOvertimeBonus?: boolean; // 추가근무 1.5배 가산수당 적용 여부 (기본 true)
   badgeTheme?: PresetBadgeTheme;
   colorTheme?: PresetBadgeTheme;
   // Leave specifics
@@ -87,22 +90,28 @@ export type PaydayOption = 1 | 5 | 10 | 15 | 25 | 'last';
 
 export interface ShiftCalculation {
   workedMinutes: number;
-  workedHours: number;
+  workedHours: number; // total worked hours including overtime
+  regularHours: number; // regular scheduled hours
+  overtimeHours: number; // additional overtime hours
   nightHours: number;
   basePay: number;
   nightPay: number;
   substitutePay: number;
+  overtimePay: number;
   totalShiftPay: number;
 }
 
 export interface MonthlyPayrollSummary {
   totalWorkedHours: number;
+  totalRegularHours: number;
+  totalOvertimeHours: number;
   totalWorkDays: number;
   basePay: number;
   weeklyHolidayPay: number;
   weeklyHours: number[]; // Hours worked in week 1..4
   weeklyHolidayEarned: boolean[]; // Whether weekly holiday pay met for week 1..4
   nightOvertimePay: number;
+  overtimePay: number;
   substitutePay: number;
   grossPay: number;
   // Deductions

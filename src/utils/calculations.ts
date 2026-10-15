@@ -167,20 +167,26 @@ export function calculateShiftPay(shift: ShiftRecord): ShiftCalculation {
       return {
         workedMinutes: recognizedHours * 60,
         workedHours: recognizedHours,
+        regularHours: recognizedHours,
+        overtimeHours: 0,
         nightHours: 0,
         basePay,
         nightPay: 0,
         substitutePay: 0,
+        overtimePay: 0,
         totalShiftPay: basePay,
       };
     } else {
       return {
         workedMinutes: 0,
         workedHours: 0,
+        regularHours: 0,
+        overtimeHours: 0,
         nightHours: 0,
         basePay: 0,
         nightPay: 0,
         substitutePay: 0,
+        overtimePay: 0,
         totalShiftPay: 0,
       };
     }
@@ -192,10 +198,13 @@ export function calculateShiftPay(shift: ShiftRecord): ShiftCalculation {
     shift.breakMinutes
   );
 
-  const workedHours = workedMinutes / 60;
+  const regularHours = workedMinutes / 60;
+  const overtimeHours = Math.max(0, shift.overtimeHours || 0);
+  const totalWorkedHours = regularHours + overtimeHours;
+  const totalWorkedMinutes = workedMinutes + Math.round(overtimeHours * 60);
   const nightHours = nightMinutes / 60;
 
-  const basePay = Math.round(workedHours * shift.hourlyWage);
+  const basePay = Math.round(regularHours * shift.hourlyWage);
   let nightPay = 0;
   let substitutePay = 0;
 
@@ -206,18 +215,25 @@ export function calculateShiftPay(shift: ShiftRecord): ShiftCalculation {
 
   // Substitute urgent shift bonus: 20% extra (1.2x total)
   if (shift.hasSubstituteBonus) {
-    substitutePay = Math.round(workedHours * shift.hourlyWage * 0.2);
+    substitutePay = Math.round(regularHours * shift.hourlyWage * 0.2);
   }
 
-  const totalShiftPay = basePay + nightPay + substitutePay;
+  // Additional overtime pay: Korean Labor Standards Act standard is 1.5x (or 1.0x if toggle off)
+  const overtimeMultiplier = shift.hasOvertimeBonus !== false ? 1.5 : 1.0;
+  const overtimePay = Math.round(overtimeHours * shift.hourlyWage * overtimeMultiplier);
+
+  const totalShiftPay = basePay + nightPay + substitutePay + overtimePay;
 
   return {
-    workedMinutes,
-    workedHours,
+    workedMinutes: totalWorkedMinutes,
+    workedHours: totalWorkedHours,
+    regularHours,
+    overtimeHours,
     nightHours,
     basePay,
     nightPay,
     substitutePay,
+    overtimePay,
     totalShiftPay,
   };
 }
@@ -236,10 +252,13 @@ export function calculateMonthlyPayroll(
   const monthShifts = shifts.filter((s) => s.date.startsWith(targetYearMonth));
 
   let totalWorkedHours = 0;
+  let totalRegularHours = 0;
+  let totalOvertimeHours = 0;
   let totalWorkDays = 0;
   let basePay = 0;
   let nightOvertimePay = 0;
   let substitutePay = 0;
+  let overtimePay = 0;
 
   // Track weekly hours for 4 primary weeks (by week index 0..3)
   const weeklyHours = [0, 0, 0, 0];
@@ -248,12 +267,15 @@ export function calculateMonthlyPayroll(
     const calc = calculateShiftPay(shift);
     if (shift.type === 'work' || shift.isPaidLeave) {
       totalWorkedHours += calc.workedHours;
+      totalRegularHours += calc.regularHours;
+      totalOvertimeHours += calc.overtimeHours;
       if (shift.type === 'work') {
         totalWorkDays += 1;
       }
       basePay += calc.basePay;
       nightOvertimePay += calc.nightPay;
       substitutePay += calc.substitutePay;
+      overtimePay += calc.overtimePay;
 
       // Determine week number from day of month
       const day = parseInt(shift.date.split('-')[2], 10);
@@ -278,7 +300,8 @@ export function calculateMonthlyPayroll(
     });
   }
 
-  const grossPay = basePay + weeklyHolidayPay + nightOvertimePay + substitutePay;
+  const grossPay =
+    basePay + weeklyHolidayPay + nightOvertimePay + substitutePay + overtimePay;
 
   // Deductions calculation
   let incomeTax = 0;
@@ -312,12 +335,15 @@ export function calculateMonthlyPayroll(
 
   return {
     totalWorkedHours: Math.round(totalWorkedHours * 10) / 10,
+    totalRegularHours: Math.round(totalRegularHours * 10) / 10,
+    totalOvertimeHours: Math.round(totalOvertimeHours * 10) / 10,
     totalWorkDays,
     basePay,
     weeklyHolidayPay,
     weeklyHours: weeklyHours.map((h) => Math.round(h * 10) / 10),
     weeklyHolidayEarned,
     nightOvertimePay,
+    overtimePay,
     substitutePay,
     grossPay,
     incomeTax,
