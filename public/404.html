@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>ShiftMate</title>
+    <script>
+      (function() {
+        var path = window.location.pathname;
+        var cleanPath = path.replace(/^\/|\/$/g, '');
+        var segments = cleanPath ? cleanPath.split('/') : [];
+        var repoRoot = segments.length > 0 ? '/' + segments[0] + '/' : '/';
+        var target = window.location.origin + repoRoot + window.location.search + window.location.hash;
+        window.location.replace(target);
+      })();
+    </script>
+  </head>
+  <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#faf8ff;color:#004ac6;">
+    <div style="text-align:center;padding:20px;">
+      <h2 style="margin-bottom:8px;font-size:18px;">ShiftMate 연결 중...</h2>
+      <p style="font-size:14px;color:#434655;">메인 화면으로 이동합니다.</p>
+    </div>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useShift } from '../context/ShiftContext';
 import { formatKRW } from '../utils/calculations';
 import { PaydayOption, Workplace } from '../types';
@@ -111,11 +111,21 @@ export const SettingsView: React.FC = () => {
     showToast,
     profileImage,
     userName,
+    updateUserName,
+    exportAppData,
+    importAppData,
     openProfileModal,
     resetToDefaultProfile,
     openWorkplaceModal,
     openTermsModal,
   } = useShift();
+
+  const [inputUserName, setInputUserName] = useState(userName);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setInputUserName(userName);
+  }, [userName]);
 
   const [isEditingWorkplace, setIsEditingWorkplace] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState(activeWorkplace.icon);
@@ -123,6 +133,41 @@ export const SettingsView: React.FC = () => {
   const [wpRole, setWpRole] = useState(activeWorkplace.role);
   const [wpWage, setWpWage] = useState(String(activeWorkplace.hourlyWage));
   const [customEmojiInput, setCustomEmojiInput] = useState('');
+
+  // Keep workplace form synced with activeWorkplace
+  useEffect(() => {
+    setSelectedIcon(activeWorkplace.icon);
+    setWpName(activeWorkplace.name);
+    setWpRole(activeWorkplace.role);
+    setWpWage(String(activeWorkplace.hourlyWage));
+  }, [activeWorkplace]);
+
+  const handleSaveUserName = () => {
+    const trimmed = inputUserName.trim();
+    if (!trimmed) {
+      showToast('⚠️ 이름을 1글자 이상 입력해 주세요.');
+      return;
+    }
+    updateUserName(trimmed);
+    showToast(`이름이 '${trimmed}'(으)로 안전하게 저장되었습니다.`);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        importAppData(content);
+      }
+    };
+    reader.onerror = () => {
+      showToast('⚠️ 파일을 읽는 도중 오류가 발생했습니다.');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   // Workplace Long-Press Delete Modal State
   const [wpToDelete, setWpToDelete] = useState<Workplace | null>(null);
@@ -202,57 +247,95 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* User Profile Section */}
-      <section className="bg-white rounded-2xl p-4 shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="relative cursor-pointer" onClick={openProfileModal}>
-            {profileImage ? (
-              <img
-                src={profileImage}
-                alt={userName}
-                className="w-13 h-13 rounded-2xl object-cover ring-2 ring-[#004ac6]/30 shadow-xs"
-              />
-            ) : (
-              <div className="w-13 h-13 rounded-2xl bg-[#eaedff] text-[#004ac6] flex items-center justify-center text-2xl border border-[#c3c6d7]/40 shadow-xs">
-                <span className="material-symbols-outlined text-[30px]">person</span>
-              </div>
-            )}
-            <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#004ac6] text-white flex items-center justify-center shadow-xs text-[11px]">
-              📷
-            </span>
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold text-[#131b2e] truncate">{userName}</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-[#eaedff] text-[#004ac6]">
-                {profileImage ? '커스텀 사진' : '기본 프로필'}
+      {/* User Profile Section with Direct Name/Nickname Editor */}
+      <section className="bg-white rounded-2xl p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative cursor-pointer" onClick={openProfileModal} title="사진 변경">
+              {profileImage ? (
+                <img
+                  src={profileImage}
+                  alt={userName}
+                  className="w-13 h-13 rounded-2xl object-cover ring-2 ring-[#004ac6]/30 shadow-xs"
+                />
+              ) : (
+                <div className="w-13 h-13 rounded-2xl bg-[#eaedff] text-[#004ac6] flex items-center justify-center text-2xl border border-[#c3c6d7]/40 shadow-xs">
+                  <span className="material-symbols-outlined text-[30px]">person</span>
+                </div>
+              )}
+              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#004ac6] text-white flex items-center justify-center shadow-xs text-[11px]">
+                📷
               </span>
             </div>
-            <p className="text-xs text-[#434655] mt-0.5">
-              스마트폰 갤러리 또는 PC 사진 업로드 지원
-            </p>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-sm font-bold text-[#131b2e]">{userName}</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-[#eaedff] text-[#004ac6]">
+                  {profileImage ? '커스텀 사진' : '기본 프로필'}
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-[#e8f5e9] text-[#2e7d32]">
+                  안전 저장 활성화됨
+                </span>
+              </div>
+              <p className="text-xs text-[#434655] mt-0.5">
+                현재 선택된 근무처: <strong>{activeWorkplace.name}</strong> ({activeWorkplace.role})
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {profileImage && (
+              <button
+                type="button"
+                onClick={resetToDefaultProfile}
+                className="px-2.5 py-1.5 rounded-xl bg-[#f2f3ff] hover:bg-[#ffdad6]/40 text-[#ad0033] text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+              >
+                기본으로
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={openProfileModal}
+              className="px-3 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs hover:bg-[#003ea8] active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[15px]">upload</span>
+              <span>사진/캐릭터 설정</span>
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {profileImage && (
+        {/* Direct Name / Nickname Input Field */}
+        <div className="pt-3 border-t border-[#c3c6d7]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#f8f9ff] p-3 rounded-xl border border-[#004ac6]/15">
+          <div className="flex flex-col">
+            <label className="text-xs font-bold text-[#131b2e] flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[17px] text-[#004ac6]">badge</span>
+              <span>이름 / 연구원 닉네임</span>
+            </label>
+            <span className="text-[11px] text-[#737686]">
+              근무일지, 달력, 급여명세서에 표기되며 브라우저 종료 후 재접속 시에도 유지됩니다.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <input
+              type="text"
+              value={inputUserName}
+              onChange={(e) => setInputUserName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveUserName();
+              }}
+              placeholder="예: 홍길동 연구원, 매니저"
+              className="px-3 py-1.5 rounded-xl bg-white text-xs font-bold text-[#131b2e] border border-[#c3c6d7]/50 focus:border-[#004ac6] focus:ring-1 focus:ring-[#004ac6] outline-none w-44 sm:w-52 shadow-2xs"
+            />
             <button
               type="button"
-              onClick={resetToDefaultProfile}
-              className="px-2.5 py-1.5 rounded-xl bg-[#f2f3ff] hover:bg-[#ffdad6]/40 text-[#ad0033] text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+              onClick={handleSaveUserName}
+              className="px-3.5 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs hover:bg-[#003ea8] active:scale-95 transition-all cursor-pointer shrink-0 flex items-center gap-1"
             >
-              기본으로
+              <span className="material-symbols-outlined text-[14px]">save</span>
+              <span>저장</span>
             </button>
-          )}
-          <button
-            type="button"
-            onClick={openProfileModal}
-            className="px-3 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs hover:bg-[#003ea8] active:scale-95 transition-all cursor-pointer flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-[15px]">upload</span>
-            <span>프로필 사진 변경</span>
-          </button>
+          </div>
         </div>
       </section>
 
@@ -489,7 +572,7 @@ export const SettingsView: React.FC = () => {
                   <span className="text-[11px] font-bold text-[#004ac6] block">
                     {cat.category}
                   </span>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {cat.icons.map((opt) => (
                       <button
                         key={opt.label}
@@ -498,14 +581,16 @@ export const SettingsView: React.FC = () => {
                           setSelectedIcon(opt.icon);
                           setCustomEmojiInput('');
                         }}
-                        className={`py-1.5 px-2 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all ${
+                        className={`py-2 px-2.5 rounded-xl text-xs flex items-center justify-start gap-2 active:scale-95 transition-all text-left min-w-0 ${
                           selectedIcon === opt.icon && !customEmojiInput
                             ? 'bg-[#dbe1ff] border border-[#004ac6] text-[#004ac6] font-bold shadow-xs'
                             : 'bg-[#f2f3ff] hover:bg-[#eaedff] text-[#434655]'
                         }`}
                       >
-                        <span className="text-sm">{opt.icon}</span>
-                        <span className="text-[10px] truncate">{opt.label}</span>
+                        <span className="text-base shrink-0">{opt.icon}</span>
+                        <span className="text-[11px] font-medium break-keep leading-tight">
+                          {opt.label}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -903,52 +988,73 @@ export const SettingsView: React.FC = () => {
       </section>
 
       {/* Data Management, Backup, and Sample Controls */}
-      <section className="bg-[#f2f3ff] rounded-2xl p-4 flex flex-col gap-3 border border-[#c3c6d7]/30">
+      <section className="bg-[#f2f3ff] rounded-2xl p-4 flex flex-col gap-3.5 border border-[#c3c6d7]/30">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-[#131b2e]">데이터 백업 및 안전 보관</span>
-          <span className="text-[11px] text-[#006c49] font-bold flex items-center gap-1">
+          <span className="text-xs font-bold text-[#131b2e]">데이터 백업 및 복원 (안전 보관)</span>
+          <span className="text-[11px] text-[#006c49] font-bold flex items-center gap-1 bg-[#6cf8bb]/40 px-2 py-0.5 rounded">
             <span className="material-symbols-outlined text-[13px]">verified</span>
-            <span>로컬 브라우저 영구 저장됨</span>
+            <span>로컬 &amp; IndexedDB 이중 보존</span>
           </span>
+        </div>
+
+        {/* Chrome Clear Explanation Notice */}
+        <div className="p-3 rounded-xl bg-white border border-[#004ac6]/20 flex flex-col gap-1.5 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-[#004ac6]">
+            <span className="material-symbols-outlined text-[18px]">info</span>
+            <span>Chrome 기록 삭제와 데이터 보존 안내</span>
+          </div>
+          <p className="text-[11px] text-[#434655] leading-relaxed">
+            Chrome 브라우저에서 <strong>[인터넷 사용 기록 삭제(쿠키 및 사이트 데이터)]</strong>를 실행하면 브라우저 정책상 로컬 저장소가 비워집니다. PWA 앱도 브라우저의 저장 엔진을 사용하므로, 중요한 기록을 영구 보관하려면 아래 <strong>[데이터 백업 파일 다운로드]</strong>를 통해 스마트폰 또는 PC에 백업 파일을 저장해 두세요. 기록이 초기화되어도 <strong>[백업 복원]</strong> 버튼을 누르면 1초 만에 그대로 되살아납니다!
+          </p>
+        </div>
+
+        {/* Real Backup & Restore Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={exportAppData}
+            className="py-2.5 px-3 bg-[#004ac6] hover:bg-[#003ea8] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[18px]">file_download</span>
+            <span>데이터 백업 (JSON 파일 다운로드)</span>
+          </button>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="py-2.5 px-3 bg-white hover:bg-[#eaedff] text-[#004ac6] border border-[#004ac6]/30 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[18px]">file_upload</span>
+            <span>백업 복원 (JSON 파일 불러오기)</span>
+          </button>
+
+          {/* Hidden File Input for Backup Restore */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept=".json,application/json"
+            className="hidden"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => showToast('클라우드에 근무 데이터가 백업되었습니다.')}
-            className="py-2.5 px-3 bg-white hover:bg-[#eaedff] text-[#131b2e] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[18px] text-[#004ac6]">cloud_upload</span>
-            <span>클라우드 백업</span>
-          </button>
-          <button
             onClick={handleExportCSV}
-            className="py-2.5 px-3 bg-white hover:bg-[#eaedff] text-[#131b2e] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
+            className="py-2 px-3 bg-white hover:bg-[#eaedff] text-[#131b2e] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
             type="button"
           >
             <span className="material-symbols-outlined text-[18px] text-[#006c49]">table_view</span>
             <span>엑셀(CSV) 다운</span>
           </button>
-        </div>
 
-        {/* PDF Export Banner */}
-        <div className="p-3 rounded-xl bg-white border border-[#c3c6d7]/30 flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[18px] text-[#ad0033]">picture_as_pdf</span>
-              <span className="text-xs font-bold text-[#131b2e]">근무 캘린더 PDF 내보내기</span>
-            </div>
-            <p className="text-[10px] text-[#434655] mt-0.5 truncate">
-              월별 근무일자 증빙 PDF (점주 제출 및 보관용)
-            </p>
-          </div>
           <button
             onClick={() => openPdfModal('timesheet')}
-            className="py-1.5 px-3 bg-[#dbe1ff] text-[#004ac6] hover:bg-[#004ac6] hover:text-white rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-all flex items-center gap-1 shadow-xs"
+            className="py-2 px-3 bg-white hover:bg-[#eaedff] text-[#ad0033] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all"
             type="button"
           >
-            <span className="material-symbols-outlined text-[15px]">download</span>
-            <span>리포트 출력</span>
+            <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+            <span>근무 캘린더 PDF 출력</span>
           </button>
         </div>
 

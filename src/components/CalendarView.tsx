@@ -28,6 +28,8 @@ export const CalendarView: React.FC = () => {
     setActiveTab,
     showToast,
     loadSampleData,
+    weekStartsOn,
+    setWeekStartsOn,
   } = useShift();
 
   const [calendarViewMode, setCalendarViewMode] = useState<'monthly' | 'weekly' | 'list'>('monthly');
@@ -83,14 +85,15 @@ export const CalendarView: React.FC = () => {
     setCurrentMonth(formatted);
   };
 
-  // Calendar days calculation (starts Monday)
+  // Calendar days calculation (supports Sunday-start or Monday-start)
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
     const daysInMonth = lastDay.getDate();
 
-    let startDayOfWeek = firstDay.getDay() - 1;
-    if (startDayOfWeek === -1) startDayOfWeek = 6;
+    // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+    const rawFirstDow = firstDay.getDay();
+    const startDayOffset = weekStartsOn === 'mon' ? (rawFirstDow + 6) % 7 : rawFirstDow;
 
     const days: Array<{
       dateStr: string;
@@ -100,27 +103,28 @@ export const CalendarView: React.FC = () => {
     }> = [];
 
     const prevMonthLastDay = new Date(year, month - 1, 0).getDate();
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    for (let i = startDayOffset - 1; i >= 0; i--) {
       const d = prevMonthLastDay - i;
       const prevM = month === 1 ? 12 : month - 1;
       const prevY = month === 1 ? year - 1 : year;
+      const dateStr = `${prevY}-${String(prevM).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dow = new Date(prevY, prevM - 1, d).getDay();
       days.push({
-        dateStr: `${prevY}-${String(prevM).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+        dateStr,
         dayNumber: d,
         isCurrentMonth: false,
-        dayOfWeek: (startDayOfWeek - 1 - i) % 7,
+        dayOfWeek: dow,
       });
     }
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dow = new Date(year, month - 1, d).getDay();
-      const adjustedDow = dow === 0 ? 6 : dow - 1;
       days.push({
         dateStr,
         dayNumber: d,
         isCurrentMonth: true,
-        dayOfWeek: adjustedDow,
+        dayOfWeek: dow,
       });
     }
 
@@ -129,17 +133,19 @@ export const CalendarView: React.FC = () => {
       for (let i = 1; i <= remaining; i++) {
         const nextM = month === 12 ? 1 : month + 1;
         const nextY = month === 12 ? year + 1 : year;
+        const dateStr = `${nextY}-${String(nextM).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        const dow = new Date(nextY, nextM - 1, i).getDay();
         days.push({
-          dateStr: `${nextY}-${String(nextM).padStart(2, '0')}-${String(i).padStart(2, '0')}`,
+          dateStr,
           dayNumber: i,
           isCurrentMonth: false,
-          dayOfWeek: days.length % 7,
+          dayOfWeek: dow,
         });
       }
     }
 
     return days;
-  }, [year, month]);
+  }, [year, month, weekStartsOn]);
 
   // Lookup shift for a date
   const shiftMap = useMemo(() => {
@@ -193,11 +199,11 @@ export const CalendarView: React.FC = () => {
   const weekDays = useMemo(() => {
     const [refY, refM, refD] = weekRefDateStr.split('-').map(Number);
     const targetDate = new Date(refY, refM - 1, refD);
-    const dayOfWeek = targetDate.getDay();
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const rawDow = targetDate.getDay(); // 0 is Sunday, 6 is Saturday
+    const offset = weekStartsOn === 'mon' ? (rawDow + 6) % 7 : rawDow;
 
-    const monday = new Date(targetDate);
-    monday.setDate(targetDate.getDate() - daysFromMonday);
+    const startDate = new Date(targetDate);
+    startDate.setDate(targetDate.getDate() - offset);
 
     const days: Array<{
       dateStr: string;
@@ -208,28 +214,29 @@ export const CalendarView: React.FC = () => {
       dayName: string;
     }> = [];
 
-    const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
     for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
       const y = d.getFullYear();
       const m = d.getMonth() + 1;
       const dateNum = d.getDate();
       const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(dateNum).padStart(2, '0')}`;
+      const dow = d.getDay();
 
       days.push({
         dateStr,
         dateNumber: dateNum,
         monthNumber: m,
         yearNumber: y,
-        dayOfWeek: i,
-        dayName: dayNames[i],
+        dayOfWeek: dow,
+        dayName: dayNames[dow],
       });
     }
 
     return days;
-  }, [weekRefDateStr]);
+  }, [weekRefDateStr, weekStartsOn]);
 
   const handlePrevWeek = () => {
     const [refY, refM, refD] = weekRefDateStr.split('-').map(Number);
@@ -532,6 +539,34 @@ export const CalendarView: React.FC = () => {
               <span>인쇄/PDF</span>
             </button>
 
+            {/* Calendar Start Day Toggle (일~토 / 월~일) */}
+            <div className="flex items-center bg-[#eaedff] rounded-full p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setWeekStartsOn('sun')}
+                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                  weekStartsOn === 'sun'
+                    ? 'bg-white text-[#004ac6] shadow-xs font-bold'
+                    : 'text-[#434655] hover:text-[#131b2e]'
+                }`}
+                title="일요일부터 시작하는 달력 (일~토)"
+              >
+                일~토
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekStartsOn('mon')}
+                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                  weekStartsOn === 'mon'
+                    ? 'bg-white text-[#004ac6] shadow-xs font-bold'
+                    : 'text-[#434655] hover:text-[#131b2e]'
+                }`}
+                title="월요일부터 시작하는 달력 (월~일)"
+              >
+                월~일
+              </button>
+            </div>
+
             {/* Segmented Switcher for Monthly / Weekly / List */}
             <div className="flex items-center bg-[#eaedff] rounded-full p-0.5 text-xs font-semibold">
               <button
@@ -631,15 +666,29 @@ export const CalendarView: React.FC = () => {
             </div>
           )}
 
-          {/* Day of Week Headers */}
-          <div className="grid grid-cols-7 text-center pb-2 text-xs font-semibold text-[#434655]">
-            <span>월</span>
-            <span>화</span>
-            <span>수</span>
-            <span>목</span>
-            <span>금</span>
-            <span className="text-[#004ac6]">토</span>
-            <span className="text-[#b30026]">일</span>
+          {/* Day of Week Headers (Starts Sunday or Monday according to weekStartsOn) */}
+          <div className="grid grid-cols-7 text-center pb-2 text-xs font-semibold">
+            {weekStartsOn === 'sun' ? (
+              <>
+                <span className="text-[#b30026]">일</span>
+                <span className="text-[#434655]">월</span>
+                <span className="text-[#434655]">화</span>
+                <span className="text-[#434655]">수</span>
+                <span className="text-[#434655]">목</span>
+                <span className="text-[#434655]">금</span>
+                <span className="text-[#004ac6]">토</span>
+              </>
+            ) : (
+              <>
+                <span className="text-[#434655]">월</span>
+                <span className="text-[#434655]">화</span>
+                <span className="text-[#434655]">수</span>
+                <span className="text-[#434655]">목</span>
+                <span className="text-[#434655]">금</span>
+                <span className="text-[#004ac6]">토</span>
+                <span className="text-[#b30026]">일</span>
+              </>
+            )}
           </div>
 
           {/* Calendar 7-Column Grid */}
@@ -648,8 +697,8 @@ export const CalendarView: React.FC = () => {
               const shift = shiftMap.get(cell.dateStr);
               const isSelected = selectedDate === cell.dateStr;
               const isToday = todayDate === cell.dateStr;
-              const isWeekendSat = cell.dayOfWeek === 5;
-              const isWeekendSun = cell.dayOfWeek === 6;
+              const isWeekendSun = cell.dayOfWeek === 0;
+              const isWeekendSat = cell.dayOfWeek === 6;
 
               // Public Holiday Check (User Requested: 빨간색 & 공휴일명 표기)
               const holiday = getKoreanHoliday(cell.dateStr);
@@ -835,8 +884,8 @@ export const CalendarView: React.FC = () => {
               const shift = shiftMap.get(day.dateStr);
               const isSelected = selectedDate === day.dateStr;
               const isToday = todayDate === day.dateStr;
-              const isSat = day.dayOfWeek === 5;
-              const isSun = day.dayOfWeek === 6;
+              const isSun = day.dayOfWeek === 0;
+              const isSat = day.dayOfWeek === 6;
               const holiday = getKoreanHoliday(day.dateStr);
               const isHoliday = !!holiday;
               const shiftCalc = shift ? calculateShiftPay(shift) : null;

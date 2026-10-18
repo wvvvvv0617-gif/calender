@@ -197,16 +197,21 @@ export const ProfileModal: React.FC = () => {
 
           {/* Name Input */}
           <div className="flex flex-col gap-1 pt-2 border-t border-[#eaedff]">
-            <label className="text-xs font-bold text-[#131b2e]">이름 / 연구원 닉네임</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[#131b2e]">이름 / 연구원 닉네임</label>
+              <span className="text-[10px] text-[#006c49] font-bold bg-[#6cf8bb]/40 px-1.5 py-0.2 rounded">
+                입력 즉시 안전 저장
+              </span>
+            </div>
             <input
               type="text"
               value={userName}
               onChange={(e) => updateUserName(e.target.value)}
               placeholder="근무자 또는 연구원 이름"
-              className="w-full px-3 py-2 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] border border-[#c3c6d7]/30 focus:border-[#004ac6] focus:bg-white outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-[#f2f3ff] text-xs font-bold text-[#131b2e] border border-[#c3c6d7]/30 focus:border-[#004ac6] focus:bg-white outline-none"
             />
             <span className="text-[10px] text-[#737686]">
-              현재 근무처: {activeWorkplace.name} ({activeWorkplace.role})
+              현재 근무처: {activeWorkplace.name} ({activeWorkplace.role}) · 브라우저를 껐다 켜도 안전하게 유지됩니다.
             </span>
           </div>
 

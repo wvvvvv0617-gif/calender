@@ -164,7 +164,7 @@ export const Header: React.FC = () => {
               className="flex items-center gap-1 min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-95 transition-all truncate text-left border border-[#c3c6d7]/20 cursor-pointer"
               type="button"
             >
-              <span className="text-[14px] sm:text-[15px] font-semibold text-[#131b2e] truncate max-w-[130px] sm:max-w-[200px]">
+              <span className="text-[14px] sm:text-[15px] font-semibold text-[#131b2e] truncate max-w-[190px] sm:max-w-[280px]">
                 {activeWorkplace.icon} {activeWorkplace.name}
               </span>
               <span className="material-symbols-outlined text-[#737686] text-[18px] shrink-0">

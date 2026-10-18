@@ -4,14 +4,28 @@ import { useShift } from '../context/ShiftContext';
 export const PwaInstallModal: React.FC = () => {
   const { isPwaModalOpen, closePwaModal, triggerPwaInstall, isInstallable, isInstalled, showToast } = useShift();
   const [activeGuideTab, setActiveGuideTab] = useState<'galaxy' | 'iphone' | 'pc'>('galaxy');
-  const [liveUrl, setLiveUrl] = useState<string>('');
+  const [liveUrl, setLiveUrl] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('shiftmate_custom_url');
+      if (saved) return saved;
+      return window.location.href;
+    }
+    return '';
+  });
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [customInputUrl, setCustomInputUrl] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const url = window.location.href.startsWith('http')
-        ? window.location.href
-        : window.location.origin;
-      setLiveUrl(url);
+      const saved = localStorage.getItem('shiftmate_custom_url');
+      if (saved) {
+        setLiveUrl(saved);
+        setCustomInputUrl(saved);
+      } else {
+        const current = window.location.href;
+        setLiveUrl(current);
+        setCustomInputUrl(current);
+      }
     }
   }, [isPwaModalOpen]);
 
@@ -268,17 +282,100 @@ export const PwaInstallModal: React.FC = () => {
 
         {/* Content */}
         <div className="p-5 overflow-y-auto space-y-4 text-xs text-[#131b2e]">
-          {/* Key Callout for AI Studio users */}
-          <div className="p-3.5 rounded-2xl bg-[#eff1ff] border border-[#004ac6]/30 flex items-start gap-2.5">
-            <span className="material-symbols-outlined text-[#004ac6] text-[20px] shrink-0 mt-0.5">
-              open_in_new
-            </span>
-            <div className="min-w-0 text-[11px] leading-relaxed text-[#131b2e]">
-              <strong className="text-[#004ac6] font-bold block mb-0.5">
-                🌟 가장 확실하고 편리하게 접속하는 방법:
-              </strong>
-              AI Studio 화면 오른쪽 상단의 <strong>[새 탭에서 열기 ↗]</strong> 아이콘을 클릭하시면,
-              현재 작업 중인 실제 라이브 서버로 스마트폰/PC 브라우저 전체화면으로 즉시 들어갈 수 있습니다!
+          {/* Key Callout for Mobile & GitHub users */}
+          <div className="p-3.5 rounded-2xl bg-[#eff1ff] border border-[#004ac6]/30 flex flex-col gap-3">
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[#004ac6] text-[20px] shrink-0 mt-0.5">
+                phonelink_ring
+              </span>
+              <div className="min-w-0 text-[11.5px] leading-relaxed text-[#131b2e]">
+                <strong className="text-[#004ac6] font-bold block mb-0.5">
+                  📱 스마트폰 크롬에서 바로 앱 설치하는 방법:
+                </strong>
+                스마트폰 카메라로 아래 <strong>QR 코드를 스캔</strong>하거나 주소를 복사하여 접속하시면 흰 화면이나 오류 없이 즉시 열립니다! 크롬 브라우저 메뉴의 <strong>[앱 설치]</strong> 또는 <strong>[홈 화면에 추가]</strong>를 누르면 실제 앱으로 즉시 설치됩니다.
+              </div>
+            </div>
+
+            {/* QR Code and Live URL Bar */}
+            <div className="p-3 rounded-xl bg-white border border-[#004ac6]/20 flex flex-col sm:flex-row items-center gap-3">
+              {liveUrl && (
+                <div className="flex flex-col items-center shrink-0">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(liveUrl)}`}
+                    alt="접속용 QR 코드"
+                    className="w-24 h-24 rounded-lg border border-[#c3c6d7]/40 bg-white p-1 shadow-2xs"
+                  />
+                  <span className="text-[10px] text-[#737686] mt-1 font-semibold">스마트폰 카메라로 스캔</span>
+                </div>
+              )}
+
+              <div className="flex-1 w-full flex flex-col gap-1.5 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[#004ac6]">현재 접속 주소:</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(!isEditingUrl)}
+                    className="text-[10.5px] text-[#737686] hover:text-[#004ac6] underline cursor-pointer"
+                  >
+                    {isEditingUrl ? '닫기' : 'GitHub Pages 주소 직접 입력'}
+                  </button>
+                </div>
+
+                {isEditingUrl ? (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={customInputUrl}
+                      onChange={(e) => setCustomInputUrl(e.target.value)}
+                      placeholder="https://아이디.github.io/저장소명/"
+                      className="flex-1 px-2.5 py-1 text-[11px] font-mono border border-[#004ac6]/40 rounded-lg outline-none bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        let formatted = customInputUrl.trim();
+                        if (formatted && !formatted.endsWith('/')) formatted += '/';
+                        setLiveUrl(formatted);
+                        localStorage.setItem('shiftmate_custom_url', formatted);
+                        setIsEditingUrl(false);
+                        showToast('✅ 접속 주소가 설정되었습니다!');
+                      }}
+                      className="px-2.5 py-1 bg-[#004ac6] text-white rounded-lg text-[11px] font-bold shrink-0 cursor-pointer"
+                    >
+                      저장
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 p-1.5 bg-[#f2f3ff] rounded-lg">
+                    <span className="text-[11px] font-mono font-bold text-[#004ac6] truncate select-all">
+                      {liveUrl || '주소 확인 중...'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = liveUrl || (typeof window !== 'undefined' ? window.location.href : '');
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(target);
+                        }
+                        showToast('📋 스마트폰 접속 주소가 복사되었습니다!');
+                      }}
+                      className="px-2.5 py-1 bg-[#004ac6] text-white rounded-lg text-[11px] font-bold shrink-0 shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">content_copy</span>
+                      <span>복사</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="text-[10.5px] text-[#434655] leading-relaxed">
+                  💡 <strong>URL not found 오류 해결:</strong> 이전 세션의 만료된 임시 주소 대신 위 주소 또는 본인의 <strong>GitHub Pages 주소(끝에 / 포함)</strong>로 접속하시면 문제없이 열립니다.
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[10.5px] text-[#434655] pt-1 border-t border-[#004ac6]/15 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[#006c49] text-[15px] shrink-0">check_circle</span>
+              <span><strong>GitHub Pages 흰 화면 방지 적용:</strong> 상대 경로(./) 및 자동 슬래시 리다이렉트가 반영되어 있습니다.</span>
             </div>
           </div>
 
@@ -287,7 +384,7 @@ export const PwaInstallModal: React.FC = () => {
             <img
               alt="ShiftMate"
               className="w-13 h-13 rounded-2xl shadow-sm border border-white shrink-0"
-              src="/pwa-192x192.png"
+              src="./pwa-192x192.png"
             />
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">

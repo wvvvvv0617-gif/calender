@@ -112,7 +112,7 @@ export const WorkplaceModal: React.FC = () => {
               {WORKPLACE_ICON_CATEGORIES.map((cat) => (
                 <div key={cat.category} className="space-y-1">
                   <span className="text-[11px] font-bold text-[#004ac6] block">{cat.category}</span>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {cat.icons.map((item) => (
                       <button
                         key={item.label}
@@ -121,14 +121,16 @@ export const WorkplaceModal: React.FC = () => {
                           setIcon(item.icon);
                           setCustomEmoji('');
                         }}
-                        className={`py-1.5 px-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        className={`py-2 px-2.5 rounded-xl text-xs flex items-center justify-start gap-2 transition-all cursor-pointer min-w-0 ${
                           icon === item.icon && !customEmoji
                             ? 'bg-[#dbe1ff] border border-[#004ac6] text-[#004ac6] font-bold shadow-xs'
                             : 'bg-[#f2f3ff] hover:bg-[#eaedff] text-[#434655]'
                         }`}
                       >
-                        <span className="text-base">{item.icon}</span>
-                        <span className="text-[10px] truncate">{item.label}</span>
+                        <span className="text-lg shrink-0">{item.icon}</span>
+                        <span className="text-[12px] font-medium break-keep leading-tight text-left">
+                          {item.label}
+                        </span>
                       </button>
                     ))}
                   </div>

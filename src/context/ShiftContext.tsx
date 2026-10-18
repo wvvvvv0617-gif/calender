@@ -25,6 +25,12 @@ import {
   getCurrentMonthString,
   INITIAL_MINIMUM_WAGES,
 } from '../utils/calculations';
+import {
+  requestPersistentStorage,
+  saveSnapshotToIndexedDB,
+  loadSnapshotFromIndexedDB,
+  downloadBackupFile,
+} from '../utils/storageBackup';
 
 interface ShiftContextType {
   // Navigation
@@ -130,10 +136,16 @@ interface ShiftContextType {
   // Derived Payroll Summary
   currentMonthlySummary: MonthlyPayrollSummary;
 
-  // Data Actions
+  // Calendar Day Order
+  weekStartsOn: 'sun' | 'mon';
+  setWeekStartsOn: (val: 'sun' | 'mon') => void;
+
+  // Data Actions & Backup
   loadSampleData: () => void;
   clearAllShifts: () => void;
   clearShiftsByPeriod: (period: 'month' | 'year' | 'all') => number;
+  exportAppData: () => void;
+  importAppData: (jsonData: string) => boolean;
 }
 
 const ShiftContext = createContext<ShiftContextType | undefined>(undefined);
@@ -147,7 +159,9 @@ const STORAGE_KEYS = {
   MIN_WAGES: 'shiftmate_min_wages_v2',
   PROFILE_IMAGE: 'shiftmate_profile_image_v2',
   USER_NAME: 'shiftmate_username_v2',
+  USER_NAME_BACKUP: 'shiftmate_username_backup',
   READ_NOTIFS: 'shiftmate_read_notifications_v2',
+  WEEK_STARTS_ON: 'shiftmate_week_starts_on_v2',
 };
 
 export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -160,7 +174,26 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     'calendar' | 'add-shift' | 'payroll-summary' | 'settings'
   >('calendar');
 
-  // User Profile State
+  // Calendar Day Order ('sun': 일~토, 'mon': 월~일)
+  const [weekStartsOn, setWeekStartsOnState] = useState<'sun' | 'mon'>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.WEEK_STARTS_ON);
+      return saved === 'mon' ? 'mon' : 'sun';
+    } catch {
+      return 'sun';
+    }
+  });
+
+  const setWeekStartsOn = (val: 'sun' | 'mon') => {
+    setWeekStartsOnState(val);
+    try {
+      localStorage.setItem(STORAGE_KEYS.WEEK_STARTS_ON, val);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // User Profile State with Dual Backup Key
   const [profileImage, setProfileImage] = useState<string | null>(() => {
     try {
       return localStorage.getItem(STORAGE_KEYS.PROFILE_IMAGE) || null;
@@ -171,7 +204,11 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const [userName, setUserName] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEYS.USER_NAME) || '근무자';
+      const primary = localStorage.getItem(STORAGE_KEYS.USER_NAME);
+      if (primary && primary.trim()) return primary.trim();
+      const backup = localStorage.getItem(STORAGE_KEYS.USER_NAME_BACKUP);
+      if (backup && backup.trim()) return backup.trim();
+      return '근무자';
     } catch {
       return '근무자';
     }
@@ -387,9 +424,12 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const updateUserName = (name: string) => {
-    setUserName(name);
+    const trimmed = name.trim();
+    const finalName = trimmed || '근무자';
+    setUserName(finalName);
     try {
-      localStorage.setItem(STORAGE_KEYS.USER_NAME, name);
+      localStorage.setItem(STORAGE_KEYS.USER_NAME, finalName);
+      localStorage.setItem(STORAGE_KEYS.USER_NAME_BACKUP, finalName);
     } catch (e) {
       console.error(e);
     }
@@ -449,6 +489,80 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       console.error(e);
     }
   }, [taxOption, holidayPayOption, paydayOption]);
+
+  // Request browser persistent storage on mount
+  useEffect(() => {
+    requestPersistentStorage();
+  }, []);
+
+  // Save IndexedDB offline snapshot whenever core state updates
+  useEffect(() => {
+    saveSnapshotToIndexedDB({
+      workplaces,
+      activeWorkplaceId,
+      presets,
+      shifts,
+      minimumWages,
+      userName,
+      profileImage,
+      taxOption,
+      holidayPayOption,
+      paydayOption,
+      weekStartsOn,
+    });
+  }, [
+    workplaces,
+    activeWorkplaceId,
+    presets,
+    shifts,
+    minimumWages,
+    userName,
+    profileImage,
+    taxOption,
+    holidayPayOption,
+    paydayOption,
+    weekStartsOn,
+  ]);
+
+  // If localStorage was cleared (e.g. by Chrome history wipe), auto-restore from IndexedDB snapshot
+  useEffect(() => {
+    const tryAutoRestore = async () => {
+      try {
+        const storedShifts = localStorage.getItem(STORAGE_KEYS.SHIFTS);
+        const storedUserName = localStorage.getItem(STORAGE_KEYS.USER_NAME);
+        if (!storedShifts && (!storedUserName || storedUserName === '근무자')) {
+          const snapshot = await loadSnapshotFromIndexedDB();
+          if (snapshot) {
+            if (snapshot.userName && snapshot.userName !== '근무자') {
+              setUserName(snapshot.userName);
+              localStorage.setItem(STORAGE_KEYS.USER_NAME, snapshot.userName);
+              localStorage.setItem(STORAGE_KEYS.USER_NAME_BACKUP, snapshot.userName);
+            }
+            if (Array.isArray(snapshot.workplaces) && snapshot.workplaces.length > 0) {
+              setWorkplaces(snapshot.workplaces);
+              localStorage.setItem(STORAGE_KEYS.WORKPLACES, JSON.stringify(snapshot.workplaces));
+            }
+            if (Array.isArray(snapshot.shifts) && snapshot.shifts.length > 0) {
+              setShifts(snapshot.shifts);
+              localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(snapshot.shifts));
+            }
+            if (Array.isArray(snapshot.presets) && snapshot.presets.length > 0) {
+              setPresets(snapshot.presets);
+              localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(snapshot.presets));
+            }
+            if (snapshot.weekStartsOn) {
+              setWeekStartsOnState(snapshot.weekStartsOn);
+              localStorage.setItem(STORAGE_KEYS.WEEK_STARTS_ON, snapshot.weekStartsOn);
+            }
+            showToast('🔄 오프라인 안전 저장소에서 이전 근무 기록을 복원했습니다.');
+          }
+        }
+      } catch (e) {
+        console.warn('Auto restore check failed:', e);
+      }
+    };
+    tryAutoRestore();
+  }, []);
 
   const activeWorkplace = useMemo(() => {
     return workplaces.find((w) => w.id === activeWorkplaceId) || workplaces[0] || DEFAULT_WORKPLACE;
@@ -744,6 +858,92 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     );
   }, [shifts, currentMonth, taxOption, holidayPayOption, activeWorkplace.hourlyWage]);
 
+  // Export complete app data as backup JSON file
+  const exportAppData = () => {
+    try {
+      const dataToExport = {
+        app: 'ShiftMate',
+        version: '2.0',
+        exportedAt: new Date().toISOString(),
+        userName,
+        profileImage,
+        workplaces,
+        activeWorkplaceId,
+        presets,
+        shifts,
+        minimumWages,
+        taxOption,
+        holidayPayOption,
+        paydayOption,
+        weekStartsOn,
+      };
+      downloadBackupFile(dataToExport, `ShiftMate_백업_${userName}`);
+      showToast('✅ 모든 데이터가 백업 파일(.json)로 안전하게 다운로드되었습니다.');
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ 백업 파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Import complete app data from backup JSON file
+  const importAppData = (jsonData: string): boolean => {
+    try {
+      const parsed = JSON.parse(jsonData);
+      if (!parsed || typeof parsed !== 'object') {
+        showToast('⚠️ 올바른 백업 파일(JSON) 형식이 아닙니다.');
+        return false;
+      }
+
+      if (parsed.userName) {
+        setUserName(parsed.userName);
+        localStorage.setItem(STORAGE_KEYS.USER_NAME, parsed.userName);
+        localStorage.setItem(STORAGE_KEYS.USER_NAME_BACKUP, parsed.userName);
+      }
+      if (parsed.profileImage !== undefined) {
+        setProfileImage(parsed.profileImage);
+        if (parsed.profileImage) {
+          localStorage.setItem(STORAGE_KEYS.PROFILE_IMAGE, parsed.profileImage);
+        } else {
+          localStorage.removeItem(STORAGE_KEYS.PROFILE_IMAGE);
+        }
+      }
+      if (Array.isArray(parsed.workplaces) && parsed.workplaces.length > 0) {
+        setWorkplaces(parsed.workplaces);
+        localStorage.setItem(STORAGE_KEYS.WORKPLACES, JSON.stringify(parsed.workplaces));
+      }
+      if (parsed.activeWorkplaceId) {
+        setActiveWorkplaceId(parsed.activeWorkplaceId);
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKPLACE, parsed.activeWorkplaceId);
+      }
+      if (Array.isArray(parsed.presets) && parsed.presets.length > 0) {
+        setPresets(parsed.presets);
+        localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(parsed.presets));
+      }
+      if (Array.isArray(parsed.shifts)) {
+        setShifts(parsed.shifts);
+        localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(parsed.shifts));
+      }
+      if (Array.isArray(parsed.minimumWages) && parsed.minimumWages.length > 0) {
+        setMinimumWages(parsed.minimumWages);
+        localStorage.setItem(STORAGE_KEYS.MIN_WAGES, JSON.stringify(parsed.minimumWages));
+      }
+      if (parsed.taxOption) setTaxOption(parsed.taxOption);
+      if (parsed.holidayPayOption) setHolidayPayOption(parsed.holidayPayOption);
+      if (parsed.paydayOption) setPaydayOption(parsed.paydayOption);
+      if (parsed.weekStartsOn) {
+        setWeekStartsOnState(parsed.weekStartsOn);
+        localStorage.setItem(STORAGE_KEYS.WEEK_STARTS_ON, parsed.weekStartsOn);
+      }
+
+      showToast('🎉 백업 파일의 모든 근무 데이터와 설정이 완벽하게 복원되었습니다!');
+      return true;
+    } catch (e) {
+      console.error(e);
+      showToast('⚠️ 백업 파일을 불러오는 중 오류가 발생했습니다.');
+      return false;
+    }
+  };
+
   return (
     <ShiftContext.Provider
       value={{
@@ -823,6 +1023,10 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         loadSampleData,
         clearAllShifts,
         clearShiftsByPeriod,
+        weekStartsOn,
+        setWeekStartsOn,
+        exportAppData,
+        importAppData,
       }}
     >
       {children}
