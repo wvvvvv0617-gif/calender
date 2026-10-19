@@ -18,6 +18,8 @@ export const PdfExportModal: React.FC = () => {
   } = useShift();
 
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
+  // Option to toggle between showing pay amounts vs only showing worked days/hours
+  const [includePayInfo, setIncludePayInfo] = useState<boolean>(true);
 
   if (!isPdfModalOpen) return null;
 
@@ -28,8 +30,10 @@ export const PdfExportModal: React.FC = () => {
 
   // Generate self-contained standalone HTML document for download & reliable printing
   const generateDocumentHtml = () => {
-    const isTimesheet = pdfExportType === 'timesheet';
-    const title = isTimesheet
+    const isTimesheet = !includePayInfo || pdfExportType === 'timesheet';
+    const title = !includePayInfo
+      ? `${year}년 ${month}월 근무 확인서 (출퇴근 기록표)`
+      : isTimesheet
       ? `${year}년 ${month}월 근무표 및 출퇴근 확인서`
       : `${year}년 ${month}월 급여명세서`;
 
@@ -51,13 +55,17 @@ export const PdfExportModal: React.FC = () => {
             ? `${calc.workedHours}시간<br><small style="color:#b35300;font-size:10px;">(기본 ${calc.regularHours}h + 연장 ${s.overtimeHours}h)</small>`
             : `${calc.workedHours}시간`;
 
+        const payCell = includePayInfo
+          ? `<td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:right;font-weight:bold;color:#131b2e;">${formatKRW(calc.totalShiftPay)}원</td>`
+          : '';
+
         return `<tr>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;">${s.date}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;">${typeBadge}${otBadge}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;color:#434655;">${s.type === 'work' ? `${s.startTime} ~ ${s.endTime}` : '-'}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:center;color:#434655;">${s.breakMinutes}분</td>
           <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:right;font-weight:bold;">${workHourText}</td>
-          <td style="padding:8px 10px;border-bottom:1px solid #eaedff;text-align:right;font-weight:bold;color:#131b2e;">${formatKRW(calc.totalShiftPay)}원</td>
+          ${payCell}
         </tr>`;
       })
       .join('');
@@ -207,7 +215,11 @@ export const PdfExportModal: React.FC = () => {
       <div style="text-align:right;">
         <div style="font-weight:bold;font-size:15px;">${activeWorkplace.name}</div>
         <div style="font-size:12px;color:#434655;">근무자: ${userName} (${activeWorkplace.role})</div>
-        <div style="font-size:12px;color:#434655;">기본시급: ${formatKRW(activeWorkplace.hourlyWage)}원</div>
+        ${
+          includePayInfo
+            ? `<div style="font-size:12px;color:#434655;">기본시급: ${formatKRW(activeWorkplace.hourlyWage)}원</div>`
+            : `<div style="font-size:12px;color:#004ac6;font-weight:bold;">총 출근: ${currentMonthlySummary.totalWorkDays}일 (${currentMonthlySummary.totalWorkedHours}h)</div>`
+        }
       </div>
     </div>
 
@@ -222,7 +234,7 @@ export const PdfExportModal: React.FC = () => {
             <th>출퇴근 시간</th>
             <th style="text-align:center;">휴게시간</th>
             <th style="text-align:right;">실근무</th>
-            <th style="text-align:right;">일 정산액</th>
+            ${includePayInfo ? '<th style="text-align:right;">일 정산액</th>' : ''}
           </tr>
         </thead>
         <tbody>
@@ -237,7 +249,11 @@ export const PdfExportModal: React.FC = () => {
             ? ` (연장 ${currentMonthlySummary.totalOvertimeHours}h 포함)`
             : ''
         }</span>
-        <span style="color:#004ac6;font-size:16px;">총 예상 수령액: ${formatKRW(currentMonthlySummary.netPay)}원</span>
+        ${
+          includePayInfo
+            ? `<span style="color:#004ac6;font-size:16px;">총 예상 수령액: ${formatKRW(currentMonthlySummary.netPay)}원</span>`
+            : `<span style="color:#006c49;font-size:13px;font-weight:bold;">✓ 출퇴근 근무 확인 완료</span>`
+        }
       </div>
       `
         : `
@@ -320,10 +336,11 @@ export const PdfExportModal: React.FC = () => {
   const handleDownloadFile = () => {
     try {
       const htmlContent = generateDocumentHtml();
-      const filename =
-        pdfExportType === 'timesheet'
-          ? `ShiftMate_근무확인서_${year}년_${month}월_${activeWorkplace.name.replace(/\s+/g, '_')}.html`
-          : `ShiftMate_급여명세서_${year}년_${month}월_${activeWorkplace.name.replace(/\s+/g, '_')}.html`;
+      const filename = !includePayInfo
+        ? `ShiftMate_근무확인서(근무일만)_${year}년_${month}월_${activeWorkplace.name.replace(/\s+/g, '_')}.html`
+        : pdfExportType === 'timesheet'
+        ? `ShiftMate_근무확인서(급여포함)_${year}년_${month}월_${activeWorkplace.name.replace(/\s+/g, '_')}.html`
+        : `ShiftMate_급여명세서_${year}년_${month}월_${activeWorkplace.name.replace(/\s+/g, '_')}.html`;
 
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -378,29 +395,78 @@ export const PdfExportModal: React.FC = () => {
             <span className="material-symbols-outlined text-[#ad0033] text-[24px]">picture_as_pdf</span>
             <div>
               <h2 className="text-sm font-bold text-[#131b2e]">
-                {pdfExportType === 'timesheet'
+                {!includePayInfo
+                  ? `${year}년 ${month}월 근무 확인서 (출퇴근 기록표)`
+                  : pdfExportType === 'timesheet'
                   ? `${year}년 ${month}월 근무표 및 출퇴근 확인서`
                   : `${year}년 ${month}월 급여명세서 (실수령액 요약)`}
               </h2>
               <span className="text-[11px] text-[#434655]">
-                파일 다운로드 또는 인쇄 대화상자에서 PDF 저장이 가능합니다.
+                {!includePayInfo
+                  ? '급여 금액이 제외된 출퇴근 일자 및 실근무시간 증빙 문서입니다.'
+                  : '파일 다운로드 또는 인쇄 대화상자에서 PDF 저장이 가능합니다.'}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => openPdfModal(pdfExportType === 'timesheet' ? 'payslip' : 'timesheet')}
-              className="px-2.5 py-1 rounded-xl bg-white text-[#004ac6] text-xs font-bold shadow-xs border border-[#004ac6]/20 cursor-pointer active:scale-95 transition-all"
-            >
-              {pdfExportType === 'timesheet' ? '명세서 서식 보기' : '근무표 서식 보기'}
-            </button>
+            {includePayInfo ? (
+              <button
+                onClick={() => openPdfModal(pdfExportType === 'timesheet' ? 'payslip' : 'timesheet')}
+                className="px-2.5 py-1 rounded-xl bg-white text-[#004ac6] text-xs font-bold shadow-xs border border-[#004ac6]/20 cursor-pointer active:scale-95 transition-all"
+              >
+                {pdfExportType === 'timesheet' ? '명세서 서식 보기' : '근무표 서식 보기'}
+              </button>
+            ) : (
+              <span className="px-2.5 py-1 rounded-xl bg-white text-[#006c49] text-xs font-bold border border-[#6cf8bb]">
+                근무일 증빙 서식
+              </span>
+            )}
             <button
               onClick={closePdfModal}
               className="w-8 h-8 rounded-full flex items-center justify-center text-[#737686] hover:bg-[#eaedff] cursor-pointer"
               aria-label="닫기"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Output Mode Switcher: 일한 날만(급여 미표시) vs 급여까지 같이 표시 */}
+        <div className="bg-[#eff2ff] px-4 py-2.5 border-b border-[#004ac6]/15 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 no-print">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#131b2e]">
+            <span className="material-symbols-outlined text-[18px] text-[#004ac6]">tune</span>
+            <span>출력 옵션 선택:</span>
+          </div>
+
+          <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-2xs border border-[#c3c6d7]/40 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setIncludePayInfo(false);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                !includePayInfo
+                  ? 'bg-[#004ac6] text-white shadow-xs'
+                  : 'text-[#434655] hover:text-[#131b2e]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">event_available</span>
+              <span>일한 날만 (급여 미표시)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIncludePayInfo(true);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                includePayInfo
+                  ? 'bg-[#004ac6] text-white shadow-xs'
+                  : 'text-[#434655] hover:text-[#131b2e]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">payments</span>
+              <span>급여까지 같이 표시</span>
             </button>
           </div>
         </div>
@@ -429,7 +495,11 @@ export const PdfExportModal: React.FC = () => {
                 ShiftMate Verified Payroll Report
               </div>
               <h1 className="text-xl md:text-2xl font-black text-[#131b2e] mt-0.5">
-                {pdfExportType === 'timesheet' ? '출퇴근 근무 확인서' : '월별 급여 명세서'}
+                {!includePayInfo
+                  ? '출퇴근 근무 확인서 (근무일·시간 증빙)'
+                  : pdfExportType === 'timesheet'
+                  ? '출퇴근 근무 확인서'
+                  : '월별 급여 명세서'}
               </h1>
               <div className="text-xs text-[#434655] mt-1">
                 정산 기간: {year}년 {month}월 1일 ~ {year}년 {month}월 말일
@@ -441,15 +511,28 @@ export const PdfExportModal: React.FC = () => {
               <div className="text-xs text-[#434655]">
                 근무자: {userName} ({activeWorkplace.role})
               </div>
-              <div className="text-xs text-[#434655]">
-                기본시급: {formatKRW(activeWorkplace.hourlyWage)}원
-              </div>
+              {includePayInfo ? (
+                <div className="text-xs text-[#434655]">
+                  기본시급: {formatKRW(activeWorkplace.hourlyWage)}원
+                </div>
+              ) : (
+                <div className="text-xs font-bold text-[#004ac6]">
+                  총 출근: {currentMonthlySummary.totalWorkDays}일 ({currentMonthlySummary.totalWorkedHours}시간)
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Timesheet Table View */}
-          {pdfExportType === 'timesheet' ? (
+          {/* Timesheet Table View (Shown when !includePayInfo or pdfExportType === 'timesheet') */}
+          {!includePayInfo || pdfExportType === 'timesheet' ? (
             <div className="space-y-4">
+              {!includePayInfo && (
+                <div className="px-3 py-1.5 rounded-lg bg-[#e8f5e9] border border-[#a5d6a7] text-xs font-bold text-[#2e7d32] flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                  <span>급여 미포함 모드: 일한 날짜와 근무 시간만 표시되는 증빙용 서식입니다.</span>
+                </div>
+              )}
+
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="bg-[#f2f3ff] text-[#434655] border-b border-[#c3c6d7]">
@@ -458,7 +541,9 @@ export const PdfExportModal: React.FC = () => {
                     <th className="py-2 px-2.5 font-bold">출퇴근 시간</th>
                     <th className="py-2 px-2.5 font-bold text-center">휴게시간</th>
                     <th className="py-2 px-2.5 font-bold text-right">실근무시간</th>
-                    <th className="py-2 px-2.5 font-bold text-right">일 정산액</th>
+                    {includePayInfo && (
+                      <th className="py-2 px-2.5 font-bold text-right">일 정산액</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eaedff]">
@@ -500,15 +585,17 @@ export const PdfExportModal: React.FC = () => {
                               </div>
                             ) : null}
                           </td>
-                          <td className="py-2 px-2.5 text-right font-bold text-[#131b2e]">
-                            {formatKRW(calc.totalShiftPay)}원
-                          </td>
+                          {includePayInfo && (
+                            <td className="py-2 px-2.5 text-right font-bold text-[#131b2e]">
+                              {formatKRW(calc.totalShiftPay)}원
+                            </td>
+                          )}
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-[#737686] text-xs">
+                      <td colSpan={includePayInfo ? 6 : 5} className="py-6 text-center text-[#737686] text-xs">
                         해당 월에 등록된 근무 내역이 없습니다.
                       </td>
                     </tr>
@@ -525,9 +612,16 @@ export const PdfExportModal: React.FC = () => {
                     ? ` (연장 ${currentMonthlySummary.totalOvertimeHours}h 포함)`
                     : ''}
                 </span>
-                <span className="text-sm text-[#004ac6]">
-                  총 예상 수령액: {formatKRW(currentMonthlySummary.netPay)}원
-                </span>
+                {includePayInfo ? (
+                  <span className="text-sm text-[#004ac6]">
+                    총 예상 수령액: {formatKRW(currentMonthlySummary.netPay)}원
+                  </span>
+                ) : (
+                  <span className="text-xs text-[#006c49] font-bold flex items-center gap-1 bg-[#6cf8bb]/30 px-2.5 py-1 rounded-lg">
+                    <span className="material-symbols-outlined text-[15px]">verified</span>
+                    <span>출퇴근 근무 확인 완료</span>
+                  </span>
+                )}
               </div>
             </div>
           ) : (
