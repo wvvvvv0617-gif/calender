@@ -146,6 +146,10 @@ interface ShiftContextType {
   clearShiftsByPeriod: (period: 'month' | 'year' | 'all') => number;
   exportAppData: () => void;
   importAppData: (jsonData: string) => boolean;
+  getAppDataJsonString: () => string;
+  isDataSafetyModalOpen: boolean;
+  openDataSafetyModal: () => void;
+  closeDataSafetyModal: () => void;
 }
 
 const ShiftContext = createContext<ShiftContextType | undefined>(undefined);
@@ -333,6 +337,10 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
+  const [isDataSafetyModalOpen, setIsDataSafetyModalOpen] = useState(false);
+
+  const openDataSafetyModal = () => setIsDataSafetyModalOpen(true);
+  const closeDataSafetyModal = () => setIsDataSafetyModalOpen(false);
 
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -859,24 +867,29 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [shifts, currentMonth, taxOption, holidayPayOption, activeWorkplace.hourlyWage]);
 
   // Export complete app data as backup JSON file
+  const getAppDataJsonString = (): string => {
+    const dataToExport = {
+      app: 'ShiftMate',
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      userName,
+      profileImage,
+      workplaces,
+      activeWorkplaceId,
+      presets,
+      shifts,
+      minimumWages,
+      taxOption,
+      holidayPayOption,
+      paydayOption,
+      weekStartsOn,
+    };
+    return JSON.stringify(dataToExport, null, 2);
+  };
+
   const exportAppData = () => {
     try {
-      const dataToExport = {
-        app: 'ShiftMate',
-        version: '2.0',
-        exportedAt: new Date().toISOString(),
-        userName,
-        profileImage,
-        workplaces,
-        activeWorkplaceId,
-        presets,
-        shifts,
-        minimumWages,
-        taxOption,
-        holidayPayOption,
-        paydayOption,
-        weekStartsOn,
-      };
+      const dataToExport = JSON.parse(getAppDataJsonString());
       downloadBackupFile(dataToExport, `ShiftMate_백업_${userName}`);
       showToast('✅ 모든 데이터가 백업 파일(.json)로 안전하게 다운로드되었습니다.');
     } catch (e) {
@@ -1027,6 +1040,10 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setWeekStartsOn,
         exportAppData,
         importAppData,
+        getAppDataJsonString,
+        isDataSafetyModalOpen,
+        openDataSafetyModal,
+        closeDataSafetyModal,
       }}
     >
       {children}

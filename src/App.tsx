@@ -17,6 +17,7 @@ import { WorkplaceModal } from './components/WorkplaceModal';
 import { PwaInstallModal } from './components/PwaInstallModal';
 import { ProfileModal } from './components/ProfileModal';
 import { TermsModal } from './components/TermsModal';
+import { DataSafetyModal } from './components/DataSafetyModal';
 
 const MainLayout: React.FC = () => {
   const { activeTab, toastMessage } = useShift();
@@ -65,6 +66,7 @@ const MainLayout: React.FC = () => {
       <PwaInstallModal />
       <ProfileModal />
       <TermsModal />
+      <DataSafetyModal />
 
       {/* Toast Notification Container */}
       {toastMessage && (

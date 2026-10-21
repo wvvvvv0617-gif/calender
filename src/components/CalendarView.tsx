@@ -30,6 +30,7 @@ export const CalendarView: React.FC = () => {
     loadSampleData,
     weekStartsOn,
     setWeekStartsOn,
+    openDataSafetyModal,
   } = useShift();
 
   const [calendarViewMode, setCalendarViewMode] = useState<'monthly' | 'weekly' | 'list'>('monthly');
@@ -314,6 +315,8 @@ export const CalendarView: React.FC = () => {
 
     if (isQuickStampActive && quickStampPresetId) {
       stampPresetOnDate(dateStr, quickStampPresetId);
+      const targetPreset = presets.find((p) => p.id === quickStampPresetId);
+      showToast(`${dateStr}에 '${targetPreset?.name || '근무'}' 등록 완료! (다른 날짜도 연속 등록 가능)`);
     }
   };
 
@@ -421,9 +424,20 @@ export const CalendarView: React.FC = () => {
               <span className="material-symbols-outlined text-[16px]">help</span>
             </button>
           </div>
-          <div className="inline-flex items-center gap-1 bg-[#eaedff] px-2.5 py-0.5 rounded-full text-[#004ac6] font-bold text-xs">
-            <span className="material-symbols-outlined text-[14px]">event_available</span>
-            <span>급여일 {paydayDDay.dDayText} ({paydayDDay.paydayFormatted})</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={openDataSafetyModal}
+              className="inline-flex items-center gap-1 bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 text-[#006c49] border border-[#006c49]/20 px-2.5 py-0.5 rounded-full font-bold text-xs transition-all active:scale-95 cursor-pointer"
+              title="크롬 기록삭제 대비 데이터 백업 및 복원"
+            >
+              <span className="material-symbols-outlined text-[14px]">shield</span>
+              <span>데이터 안전보관</span>
+            </button>
+            <div className="inline-flex items-center gap-1 bg-[#eaedff] px-2.5 py-0.5 rounded-full text-[#004ac6] font-bold text-xs">
+              <span className="material-symbols-outlined text-[14px]">event_available</span>
+              <span>급여일 {paydayDDay.dDayText} ({paydayDDay.paydayFormatted})</span>
+            </div>
           </div>
         </div>
 
@@ -1410,6 +1424,15 @@ export const CalendarView: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={openDataSafetyModal}
+              className="text-[#006c49] bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+              type="button"
+              title="크롬 기록삭제 대비 데이터 자체 보관 및 복원"
+            >
+              <span className="material-symbols-outlined text-[15px]">security</span>
+              <span>데이터 안전보관</span>
+            </button>
+            <button
               onClick={() => openPresetModal()}
               className="text-[#004ac6] hover:underline text-xs font-bold flex items-center gap-0.5 cursor-pointer"
               type="button"
@@ -1420,21 +1443,44 @@ export const CalendarView: React.FC = () => {
           </div>
         </div>
 
-        {/* Tip Box with Delete Shortcut Guidance */}
-        <div className="px-2.5 py-1.5 rounded-lg bg-[#f2f3ff] flex items-center justify-between gap-1 text-[11px] text-[#434655] leading-tight">
-          <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[#004ac6] text-[15px] shrink-0">lightbulb</span>
-            <span>
-              <strong className="text-[#131b2e] font-semibold">삭제 팁:</strong> 날짜를 <strong>마우스 우클릭</strong>하거나 <strong>꾹 누르면</strong> 삭제되며, 카드를 오른쪽 <strong>휴지통</strong>으로 드래그해도 삭제됩니다!
-            </span>
+        {/* Dynamic Tip / Active Stamp Banner */}
+        {isQuickStampActive && quickStampPresetId ? (
+          <div className="px-3 py-2 rounded-xl bg-[#004ac6] text-white flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-[18px] text-[#ffe082]">touch_app</span>
+              <div className="text-xs font-semibold truncate">
+                <strong>[{presets.find((p) => p.id === quickStampPresetId)?.name || '프리셋'}]</strong> 선택됨 → 달력에서 원하는 날짜(여러 개 연속 가능)를 누르세요!
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsQuickStampActive(false);
+                setQuickStampPresetId(null);
+                showToast('원터치 등록 모드가 해제되었습니다.');
+              }}
+              className="shrink-0 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+            >
+              <span>선택 해제</span>
+              <span className="material-symbols-outlined text-[14px]">close</span>
+            </button>
           </div>
-          <span className="material-symbols-outlined text-[#737686] text-[14px] shrink-0">drag_indicator</span>
-        </div>
+        ) : (
+          <div className="px-2.5 py-1.5 rounded-lg bg-[#f2f3ff] flex items-center justify-between gap-1 text-[11px] text-[#434655] leading-tight">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[#004ac6] text-[15px] shrink-0">touch_app</span>
+              <span>
+                <strong className="text-[#131b2e] font-semibold">원터치 등록:</strong> 아래 프리셋을 먼저 누른 후, 달력에서 원하는 날짜를 누르면 적용됩니다. (기존 선택일이 바로 바뀌지 않음)
+              </span>
+            </div>
+            <span className="material-symbols-outlined text-[#737686] text-[14px] shrink-0">drag_indicator</span>
+          </div>
+        )}
 
         {/* Horizontal Quick Preset Chips + Trash Can Drop Zone */}
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5 pt-0.5">
           {presets.map((preset) => {
-            const isSelectedForStamp = quickStampPresetId === preset.id;
+            const isSelectedForStamp = isQuickStampActive && quickStampPresetId === preset.id;
             const presetPal = PRESET_COLOR_PALETTES[preset.colorTheme || preset.badgeTheme] || PRESET_COLOR_PALETTES.blue;
             return (
               <button
@@ -1442,9 +1488,15 @@ export const CalendarView: React.FC = () => {
                 draggable
                 onDragStart={() => setDraggedPresetId(preset.id)}
                 onClick={() => {
-                  setQuickStampPresetId(preset.id);
-                  setIsQuickStampActive(true);
-                  stampPresetOnDate(selectedDate, preset.id);
+                  if (isQuickStampActive && quickStampPresetId === preset.id) {
+                    setIsQuickStampActive(false);
+                    setQuickStampPresetId(null);
+                    showToast(`'${preset.name}' 원터치 등록 모드가 해제되었습니다.`);
+                  } else {
+                    setQuickStampPresetId(preset.id);
+                    setIsQuickStampActive(true);
+                    showToast(`'${preset.name}' 선택됨! 달력에서 날짜를 누르면 적용됩니다.`);
+                  }
                 }}
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-left cursor-grab active:scale-95 transition-all ${
                   isSelectedForStamp

@@ -118,6 +118,7 @@ export const SettingsView: React.FC = () => {
     resetToDefaultProfile,
     openWorkplaceModal,
     openTermsModal,
+    openDataSafetyModal,
   } = useShift();
 
   const [inputUserName, setInputUserName] = useState(userName);
@@ -998,10 +999,20 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Chrome Clear Explanation Notice */}
-        <div className="p-3 rounded-xl bg-white border border-[#004ac6]/20 flex flex-col gap-1.5 text-xs">
-          <div className="flex items-center gap-1.5 font-bold text-[#004ac6]">
-            <span className="material-symbols-outlined text-[18px]">info</span>
-            <span>Chrome 기록 삭제와 데이터 보존 안내</span>
+        <div className="p-3.5 rounded-xl bg-white border border-[#004ac6]/20 flex flex-col gap-2 text-xs shadow-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-[#004ac6]">
+              <span className="material-symbols-outlined text-[18px]">info</span>
+              <span>Chrome 기록 삭제와 데이터 보존 안내</span>
+            </div>
+            <button
+              type="button"
+              onClick={openDataSafetyModal}
+              className="text-[11px] font-bold text-[#006c49] bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[14px]">shield</span>
+              <span>상세 보관소 열기</span>
+            </button>
           </div>
           <p className="text-[11px] text-[#434655] leading-relaxed">
             Chrome 브라우저에서 <strong>[인터넷 사용 기록 삭제(쿠키 및 사이트 데이터)]</strong>를 실행하면 브라우저 정책상 로컬 저장소가 비워집니다. PWA 앱도 브라우저의 저장 엔진을 사용하므로, 중요한 기록을 영구 보관하려면 아래 <strong>[데이터 백업 파일 다운로드]</strong>를 통해 스마트폰 또는 PC에 백업 파일을 저장해 두세요. 기록이 초기화되어도 <strong>[백업 복원]</strong> 버튼을 누르면 1초 만에 그대로 되살아납니다!
