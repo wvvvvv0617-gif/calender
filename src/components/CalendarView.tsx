@@ -390,21 +390,33 @@ export const CalendarView: React.FC = () => {
 
   return (
     <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-7xl mx-auto px-3 sm:px-4 md:px-6 pt-2">
-      {/* Auto-Save & Empty State Helpful Prompt */}
+      {/* Auto-Save & Empty State Helpful Prompt with Instant Restore */}
       {shifts.length === 0 && (
-        <div className="p-3.5 rounded-2xl bg-[#eaedff] border border-[#004ac6]/20 flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[#004ac6] text-[22px]">info</span>
-            <div className="text-xs text-[#131b2e]">
-              <span className="font-bold">현재 등록된 근무가 없습니다.</span> 날짜를 클릭하거나 프리셋을 드래그하여 근무를 추가하세요. (모든 데이터는 실시간 자동 저장됩니다)
+        <div className="p-4 rounded-2xl bg-[#eaedff] border border-[#004ac6]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <span className="material-symbols-outlined text-[#004ac6] text-[22px] shrink-0 mt-0.5">info</span>
+            <div className="text-xs text-[#131b2e] leading-relaxed">
+              <span className="font-bold">현재 등록된 근무가 없습니다.</span>
+              <p className="text-[11px] text-[#434655] mt-0.5">
+                구글 계정/크롬 기록삭제로 데이터가 초기화되었거나 기기를 새로 접속하셨다면, 백업 파일로 1초 만에 복원하실 수 있습니다.
+              </p>
             </div>
           </div>
-          <button
-            onClick={loadSampleData}
-            className="shrink-0 px-3 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
-          >
-            샘플 데이터 로드
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={openDataSafetyModal}
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#dbe1ff] text-[#004ac6] border border-[#004ac6]/30 text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[16px]">upload_file</span>
+              <span>백업 파일로 복원</span>
+            </button>
+            <button
+              onClick={loadSampleData}
+              className="px-3 py-1.5 rounded-xl bg-[#004ac6] hover:bg-[#003ea8] text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+            >
+              샘플 데이터 로드
+            </button>
+          </div>
         </div>
       )}
 

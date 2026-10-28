@@ -108,3 +108,32 @@ export function downloadBackupFile(data: Record<string, any>, fileNamePrefix = '
     throw err;
   }
 }
+
+/**
+ * Save backup file directly using native File System Access API where supported,
+ * or fall back seamlessly to download.
+ */
+export async function saveToFileWithPicker(data: Record<string, any>, fileNamePrefix = 'ShiftMate_데이터백업'): Promise<boolean> {
+  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: `${fileNamePrefix}_${dateStr}.json`,
+        types: [{
+          description: 'JSON Backup File',
+          accept: { 'application/json': ['.json'] },
+        }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(JSON.stringify(data, null, 2));
+      await writable.close();
+      return true;
+    } catch (err: any) {
+      if (err.name === 'AbortError') return false;
+      console.warn('Native file picker failed, falling back to download:', err);
+    }
+  }
+  downloadBackupFile(data, fileNamePrefix);
+  return true;
+}
+

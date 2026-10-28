@@ -113,6 +113,7 @@ export const Header: React.FC = () => {
     readNotificationIds,
     markNotificationAsRead,
     markAllNotificationsAsRead,
+    openDataSafetyModal,
   } = useShift();
 
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
@@ -309,6 +310,17 @@ export const Header: React.FC = () => {
               <span className="text-[11px] sm:text-xs">{isInstallable ? '앱 설치하기' : '홈화면 설치'}</span>
             </button>
           )}
+
+          {/* Data Safety & Backup Quick Button */}
+          <button
+            type="button"
+            onClick={openDataSafetyModal}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#6cf8bb]/25 hover:bg-[#6cf8bb]/40 text-[#006c49] border border-[#006c49]/20 text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
+            title="구글 계정/크롬 기록삭제 대비 1초 백업 및 데이터 안전보관"
+          >
+            <span className="material-symbols-outlined text-[16px]">shield</span>
+            <span className="hidden sm:inline">데이터 보관</span>
+          </button>
 
           {/* Notifications button with Red Dot disappearing on read */}
           <div className="relative">

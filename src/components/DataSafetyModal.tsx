@@ -115,17 +115,44 @@ export const DataSafetyModal: React.FC = () => {
 
         {/* Scrollable Body */}
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
-          {/* Why Chrome deletes data Banner */}
-          <div className="p-3.5 rounded-2xl bg-[#fff8e1] border border-[#ffe082] text-xs flex flex-col gap-2">
+          {/* Why Chrome deletes data Banner & Visual Checklist */}
+          <div className="p-4 rounded-2xl bg-[#fff8e1] border border-[#ffe082] text-xs flex flex-col gap-3">
             <div className="flex items-center gap-1.5 font-bold text-[#b35300]">
-              <span className="material-symbols-outlined text-[18px]">help</span>
-              <span>크롬 기록 삭제 시 왜 데이터가 사라지나요?</span>
+              <span className="material-symbols-outlined text-[20px]">help</span>
+              <span className="text-sm">클라우드 없이 영구 보존하는 방법 (크롬 설정)</span>
             </div>
+            
             <p className="text-[11px] text-[#5d4037] leading-relaxed">
-              Chrome 브라우저에서 <strong>[인터넷 사용 기록 삭제]</strong> 시 <strong>&apos;쿠키 및 기타 사이트 데이터&apos;</strong>를 체크하면, 브라우저가 모든 웹사이트의 내부 로컬 저장소(localStorage/IndexedDB)를 비우도록 작동합니다.
+              웹 브라우저의 &apos;인터넷 사용 기록 삭제&apos; 메뉴에는 <strong>[쿠키 및 사이트 데이터]</strong>가 기본 체크되어 있습니다. 이 항목만 <strong>체크 해제</strong>하시면 클라우드 연동 없이도 근무 데이터가 절대 지워지지 않습니다!
             </p>
+
+            {/* Visual Checklist Box */}
+            <div className="p-3 rounded-xl bg-white/95 border border-[#ffe082] shadow-2xs flex flex-col gap-2">
+              <span className="text-[11px] font-bold text-[#131b2e] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[15px] text-[#004ac6]">checklist</span>
+                <span>Chrome [기록 삭제] 창에서 이렇게 체크하세요:</span>
+              </span>
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center gap-2 text-[#434655] px-2 py-1 rounded-lg bg-[#f2f3ff]">
+                  <span className="w-4 h-4 rounded bg-[#004ac6] text-white flex items-center justify-center text-[10px] font-bold">✓</span>
+                  <span><strong>인터넷 사용 기록</strong> (체크 유지 - 방문/검색기록 삭제)</span>
+                </div>
+                <div className="flex items-center gap-2 text-[#ad0033] px-2 py-1.5 rounded-lg bg-[#ffdad6]/60 border border-[#ad0033]/30 font-bold">
+                  <span className="w-4 h-4 rounded bg-[#ad0033] text-white flex items-center justify-center text-[11px] font-extrabold">✕</span>
+                  <span>쿠키 및 기타 사이트 데이터 (반드시 체크 해제! ★)</span>
+                </div>
+                <div className="flex items-center gap-2 text-[#434655] px-2 py-1 rounded-lg bg-[#f2f3ff]">
+                  <span className="w-4 h-4 rounded bg-[#004ac6] text-white flex items-center justify-center text-[10px] font-bold">✓</span>
+                  <span><strong>캐시된 이미지 및 파일</strong> (체크 유지 - 용량 확보)</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-[#737686] leading-tight pt-1">
+                * 한 번만 체크를 풀어두면 Chrome이 이 설정을 기억하여 다음부터는 손댈 필요가 없습니다.
+              </p>
+            </div>
+
             <p className="text-[11px] text-[#5d4037] leading-relaxed">
-              💡 <strong>완벽 해결책:</strong> 아래 <strong>[내 기기에 백업 파일 다운로드]</strong> 또는 <strong>[백업 코드 복사]</strong>를 해두시면, 데이터가 브라우저가 아닌 스마트폰/PC의 파일로 보관되므로 크롬 기록을 100번 지워도 언제든 1초 만에 그대로 되살릴 수 있습니다!
+              💡 <strong>더 안전한 방법:</strong> 아래 <strong>[내 기기에 파일 저장]</strong>을 눌러두시면 스마트폰 [내 파일] 폴더에 실제 파일로 영구 보관되어 브라우저 데이터를 완전히 초기화해도 언제든 1초 만에 복원할 수 있습니다!
             </p>
           </div>
 
