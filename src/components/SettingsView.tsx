@@ -119,6 +119,9 @@ export const SettingsView: React.FC = () => {
     openWorkplaceModal,
     openTermsModal,
     openDataSafetyModal,
+    isGoogleDriveConnected,
+    googleUser,
+    lastDriveSyncTime,
   } = useShift();
 
   const [inputUserName, setInputUserName] = useState(userName);
@@ -991,11 +994,50 @@ export const SettingsView: React.FC = () => {
       {/* Data Management, Backup, and Sample Controls */}
       <section className="bg-[#f2f3ff] rounded-2xl p-4 flex flex-col gap-3.5 border border-[#c3c6d7]/30">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-[#131b2e]">데이터 백업 및 복원 (안전 보관)</span>
-          <span className="text-[11px] text-[#006c49] font-bold flex items-center gap-1 bg-[#6cf8bb]/40 px-2 py-0.5 rounded">
-            <span className="material-symbols-outlined text-[13px]">verified</span>
-            <span>로컬 &amp; IndexedDB 이중 보존</span>
+          <span className="text-xs font-bold text-[#131b2e]">데이터 영구 보관 &amp; 클라우드 동기화</span>
+          <span className="text-[11px] text-[#004ac6] font-bold flex items-center gap-1 bg-[#dbe1ff] px-2 py-0.5 rounded">
+            <span className="material-symbols-outlined text-[13px]">cloud_sync</span>
+            <span>{isGoogleDriveConnected ? 'Google Drive 연동 중' : 'Google Drive 지원'}</span>
           </span>
+        </div>
+
+        {/* Google Drive Status Banner */}
+        <div className="p-3.5 rounded-xl bg-linear-to-r from-[#eff3ff] to-white border-2 border-[#004ac6]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#004ac6] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <span className="material-symbols-outlined text-[22px]">cloud</span>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-[#131b2e]">구글 드라이브 무료 자동 동기화</span>
+                {isGoogleDriveConnected ? (
+                  <span className="text-[10px] font-bold bg-[#6cf8bb]/40 text-[#006c49] px-1.5 py-0.2 rounded-md">
+                    연결됨
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold bg-[#ffdad6]/60 text-[#ad0033] px-1.5 py-0.2 rounded-md">
+                    미연결
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-[#434655] mt-0.5 truncate">
+                {isGoogleDriveConnected
+                  ? `${googleUser?.email || '구글 계정'} 연동 완료 · 크롬 기록삭제에도 영구 보존`
+                  : '구글 계정(Gmail)만 있으면 100% 무료로 크롬 기록삭제에도 영구 보존됩니다.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={openDataSafetyModal}
+            className="py-2 px-3.5 bg-[#004ac6] hover:bg-[#003ea8] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer shrink-0"
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {isGoogleDriveConnected ? 'sync' : 'link'}
+            </span>
+            <span>{isGoogleDriveConnected ? '드라이브 동기화 관리' : '구글 드라이브 연결'}</span>
+          </button>
         </div>
 
         {/* Chrome Clear Explanation Notice */}

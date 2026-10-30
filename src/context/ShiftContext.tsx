@@ -31,6 +31,18 @@ import {
   loadSnapshotFromIndexedDB,
   downloadBackupFile,
 } from '../utils/storageBackup';
+import {
+  googleSignIn,
+  logout as googleLogout,
+  getAccessToken,
+  initAuth,
+  findDriveBackupFile,
+  readDriveBackupFile,
+  saveToGoogleDrive,
+  DriveFileInfo,
+} from '../utils/googleDriveSync';
+import type { User } from 'firebase/auth';
+import type { DriveConfirmDialogProps } from '../components/DriveConfirmDialog';
 
 interface ShiftContextType {
   // Navigation
@@ -150,6 +162,21 @@ interface ShiftContextType {
   isDataSafetyModalOpen: boolean;
   openDataSafetyModal: () => void;
   closeDataSafetyModal: () => void;
+
+  // Google Drive Cloud Backup & Sync
+  googleUser: User | null;
+  isGoogleDriveConnected: boolean;
+  isDriveSyncing: boolean;
+  lastDriveSyncTime: string | null;
+  driveFileInfo: DriveFileInfo | null;
+  connectGoogleDrive: () => Promise<void>;
+  disconnectGoogleDrive: () => Promise<void>;
+  refreshDriveStatus: () => Promise<void>;
+  saveToDriveWithConfirm: () => void;
+  restoreFromDriveWithConfirm: () => void;
+  executeSaveToDrive: () => Promise<boolean>;
+  executeRestoreFromDrive: () => Promise<boolean>;
+  driveConfirmDialogProps: DriveConfirmDialogProps;
 }
 
 const ShiftContext = createContext<ShiftContextType | undefined>(undefined);
@@ -166,6 +193,7 @@ const STORAGE_KEYS = {
   USER_NAME_BACKUP: 'shiftmate_username_backup',
   READ_NOTIFS: 'shiftmate_read_notifications_v2',
   WEEK_STARTS_ON: 'shiftmate_week_starts_on_v2',
+  LAST_DRIVE_SYNC: 'shiftmate_last_drive_sync_v2',
 };
 
 export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -359,9 +387,16 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     checkStandalone();
 
+    // Check if beforeinstallprompt already captured before mount
+    if (typeof window !== 'undefined' && (window as any).__deferredPwaPrompt) {
+      setDeferredPrompt((window as any).__deferredPwaPrompt);
+      setIsInstallable(true);
+    }
+
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).__deferredPwaPrompt = e;
       setIsInstallable(true);
     };
 
@@ -369,6 +404,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setIsInstalled(true);
       setIsInstallable(false);
       setDeferredPrompt(null);
+      (window as any).__deferredPwaPrompt = null;
       showToast('🎉 ShiftMate가 홈 화면에 성공적으로 설치되었습니다!');
     };
 
@@ -957,6 +993,236 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  // Google Drive Cloud Backup & Sync State
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
+  const [lastDriveSyncTime, setLastDriveSyncTime] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.LAST_DRIVE_SYNC);
+    } catch {
+      return null;
+    }
+  });
+  const [driveFileInfo, setDriveFileInfo] = useState<DriveFileInfo | null>(null);
+
+  // Drive Confirmation Dialog State (Mandatory for destructive/overwrite operations)
+  const [driveConfirmState, setDriveConfirmState] = useState<{
+    isOpen: boolean;
+    type: 'save' | 'restore';
+    title: string;
+    description: string;
+  }>({
+    isOpen: false,
+    type: 'save',
+    title: '',
+    description: '',
+  });
+
+  const isGoogleDriveConnected = !!googleUser;
+
+  // Initialize Auth state listener
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        findDriveBackupFile(token)
+          .then((info) => {
+            setDriveFileInfo(info);
+            if (info?.modifiedTime) {
+              const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
+              setLastDriveSyncTime(timeStr);
+            }
+          })
+          .catch((err) => console.warn('Drive check on load:', err));
+      },
+      () => {
+        setGoogleUser(null);
+        setDriveFileInfo(null);
+      }
+    );
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
+  const refreshDriveStatus = async () => {
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      setIsDriveSyncing(true);
+      const info = await findDriveBackupFile(token);
+      setDriveFileInfo(info);
+      if (info?.modifiedTime) {
+        const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
+        setLastDriveSyncTime(timeStr);
+        try {
+          localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast('⚠️ 드라이브 파일 상태 확인 실패: ' + (err.message || ''));
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
+
+  const connectGoogleDrive = async () => {
+    try {
+      setIsDriveSyncing(true);
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        showToast(`🎉 ${result.user.displayName || result.user.email || '구글'} 계정으로 구글 드라이브가 연결되었습니다!`);
+        try {
+          const info = await findDriveBackupFile(result.accessToken);
+          setDriveFileInfo(info);
+          if (info?.modifiedTime) {
+            const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
+            setLastDriveSyncTime(timeStr);
+            try {
+              localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        } catch (e) {
+          console.warn('Drive file search error:', e);
+        }
+      }
+    } catch (err: any) {
+      console.error('Google Drive connect error:', err);
+      showToast('⚠️ 구글 드라이브 연결 실패: ' + (err.message || '인증이 취소되었거나 오류가 발생했습니다.'));
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
+
+  const disconnectGoogleDrive = async () => {
+    try {
+      await googleLogout();
+      setGoogleUser(null);
+      setDriveFileInfo(null);
+      showToast('구글 계정 연결이 해제되었습니다.');
+    } catch (err: any) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const executeSaveToDrive = async (): Promise<boolean> => {
+    const token = await getAccessToken();
+    if (!token) {
+      showToast('⚠️ 구글 계정 인증이 만료되었습니다. 다시 로그인해주세요.');
+      await connectGoogleDrive();
+      return false;
+    }
+    try {
+      setIsDriveSyncing(true);
+      const jsonContent = getAppDataJsonString();
+      const res = await saveToGoogleDrive(token, jsonContent);
+      const timeStr = new Date(res.modifiedTime).toLocaleString('ko-KR');
+      setLastDriveSyncTime(timeStr);
+      try {
+        localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+      } catch (e) {
+        console.error(e);
+      }
+      const info = await findDriveBackupFile(token);
+      setDriveFileInfo(info);
+      showToast('☁️ 구글 드라이브에 모든 근무 기록이 안전하게 저장되었습니다!');
+      return true;
+    } catch (err: any) {
+      console.error('Drive save error:', err);
+      showToast('⚠️ 드라이브 저장 실패: ' + (err.message || ''));
+      return false;
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
+
+  const executeRestoreFromDrive = async (): Promise<boolean> => {
+    const token = await getAccessToken();
+    if (!token) {
+      showToast('⚠️ 구글 계정 인증이 만료되었습니다. 다시 로그인해주세요.');
+      await connectGoogleDrive();
+      return false;
+    }
+    try {
+      setIsDriveSyncing(true);
+      const file = await findDriveBackupFile(token);
+      if (!file) {
+        showToast('⚠️ 구글 드라이브에 저장된 ShiftMate 백업 파일이 없습니다.');
+        return false;
+      }
+      const content = await readDriveBackupFile(token, file.id);
+      const success = importAppData(content);
+      if (success) {
+        const timeStr = new Date(file.modifiedTime).toLocaleString('ko-KR');
+        setLastDriveSyncTime(timeStr);
+        setDriveFileInfo(file);
+      }
+      return success;
+    } catch (err: any) {
+      console.error('Drive restore error:', err);
+      showToast('⚠️ 드라이브 복원 실패: ' + (err.message || ''));
+      return false;
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
+
+  const saveToDriveWithConfirm = () => {
+    setDriveConfirmState({
+      isOpen: true,
+      type: 'save',
+      title: '구글 드라이브에 근무 데이터 저장',
+      description: '내 개인 구글 드라이브의 ShiftMate_Backup_Data.json 파일에 현재 기기의 모든 근무 기록과 사업장 설정을 안전하게 보관합니다.',
+    });
+  };
+
+  const restoreFromDriveWithConfirm = () => {
+    setDriveConfirmState({
+      isOpen: true,
+      type: 'restore',
+      title: '구글 드라이브에서 데이터 복원',
+      description: '구글 드라이브에 저장되어 있는 백업 파일을 불러와 현재 기기의 근무 기록을 최신 상태로 복원합니다.',
+    });
+  };
+
+  const closeDriveConfirmDialog = () => {
+    setDriveConfirmState((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleDriveConfirm = async () => {
+    if (driveConfirmState.type === 'save') {
+      const ok = await executeSaveToDrive();
+      if (ok) closeDriveConfirmDialog();
+    } else {
+      const ok = await executeRestoreFromDrive();
+      if (ok) closeDriveConfirmDialog();
+    }
+  };
+
+  const driveConfirmDialogProps: DriveConfirmDialogProps = {
+    isOpen: driveConfirmState.isOpen,
+    type: driveConfirmState.type,
+    title: driveConfirmState.title,
+    description: driveConfirmState.description,
+    details: {
+      shiftsCount: shifts.length,
+      workplacesCount: workplaces.length,
+      presetsCount: presets.length,
+      lastUpdated: driveFileInfo?.modifiedTime
+        ? new Date(driveFileInfo.modifiedTime).toLocaleString('ko-KR')
+        : undefined,
+    },
+    onConfirm: handleDriveConfirm,
+    onCancel: closeDriveConfirmDialog,
+    isLoading: isDriveSyncing,
+  };
+
   return (
     <ShiftContext.Provider
       value={{
@@ -1044,6 +1310,19 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         isDataSafetyModalOpen,
         openDataSafetyModal,
         closeDataSafetyModal,
+        googleUser,
+        isGoogleDriveConnected,
+        isDriveSyncing,
+        lastDriveSyncTime,
+        driveFileInfo,
+        connectGoogleDrive,
+        disconnectGoogleDrive,
+        refreshDriveStatus,
+        saveToDriveWithConfirm,
+        restoreFromDriveWithConfirm,
+        executeSaveToDrive,
+        executeRestoreFromDrive,
+        driveConfirmDialogProps,
       }}
     >
       {children}

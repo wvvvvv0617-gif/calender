@@ -114,6 +114,7 @@ export const Header: React.FC = () => {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     openDataSafetyModal,
+    isGoogleDriveConnected,
   } = useShift();
 
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
@@ -311,15 +312,23 @@ export const Header: React.FC = () => {
             </button>
           )}
 
-          {/* Data Safety & Backup Quick Button */}
+          {/* Google Drive & Data Safety Quick Button */}
           <button
             type="button"
             onClick={openDataSafetyModal}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#6cf8bb]/25 hover:bg-[#6cf8bb]/40 text-[#006c49] border border-[#006c49]/20 text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
-            title="구글 계정/크롬 기록삭제 대비 1초 백업 및 데이터 안전보관"
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer border ${
+              isGoogleDriveConnected
+                ? 'bg-[#eff3ff] hover:bg-[#dbe1ff] text-[#004ac6] border-[#004ac6]/30'
+                : 'bg-[#6cf8bb]/25 hover:bg-[#6cf8bb]/40 text-[#006c49] border-[#006c49]/20'
+            }`}
+            title="구글 드라이브 동기화 및 데이터 영구 보관"
           >
-            <span className="material-symbols-outlined text-[16px]">shield</span>
-            <span className="hidden sm:inline">데이터 보관</span>
+            <span className="material-symbols-outlined text-[16px]">
+              {isGoogleDriveConnected ? 'cloud_done' : 'cloud_sync'}
+            </span>
+            <span className="hidden sm:inline">
+              {isGoogleDriveConnected ? '드라이브 연동됨' : '구글 드라이브'}
+            </span>
           </button>
 
           {/* Notifications button with Red Dot disappearing on read */}

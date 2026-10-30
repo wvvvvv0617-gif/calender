@@ -18,9 +18,10 @@ import { PwaInstallModal } from './components/PwaInstallModal';
 import { ProfileModal } from './components/ProfileModal';
 import { TermsModal } from './components/TermsModal';
 import { DataSafetyModal } from './components/DataSafetyModal';
+import { DriveConfirmDialog } from './components/DriveConfirmDialog';
 
 const MainLayout: React.FC = () => {
-  const { activeTab, toastMessage } = useShift();
+  const { activeTab, toastMessage, driveConfirmDialogProps } = useShift();
 
   // Prevent native browser long-press copy context menus on UI text/elements (Native App experience)
   React.useEffect(() => {
@@ -67,6 +68,7 @@ const MainLayout: React.FC = () => {
       <ProfileModal />
       <TermsModal />
       <DataSafetyModal />
+      <DriveConfirmDialog {...driveConfirmDialogProps} />
 
       {/* Toast Notification Container */}
       {toastMessage && (

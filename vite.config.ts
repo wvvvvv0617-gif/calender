@@ -5,7 +5,12 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
-  const basePath = '/calender/';
+  const basePath = process.env.VITE_BASE || '/';
+  const normalizePath = (file: string) => {
+    if (basePath === '/') return `/${file}`;
+    return `${basePath.endsWith('/') ? basePath : basePath + '/'}${file}`;
+  };
+
   return {
     base: basePath,
     plugins: [
@@ -34,25 +39,25 @@ export default defineConfig(() => {
           scope: basePath,
           icons: [
             {
-              src: `${basePath}pwa-192x192.png`,
+              src: normalizePath('pwa-192x192.png'),
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: `${basePath}pwa-512x512.png`,
+              src: normalizePath('pwa-512x512.png'),
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: `${basePath}pwa-maskable-512x512.png`,
+              src: normalizePath('pwa-maskable-512x512.png'),
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
             },
             {
-              src: `${basePath}icon.svg`,
+              src: normalizePath('icon.svg'),
               sizes: '512x512',
               type: 'image/svg+xml',
               purpose: 'any',

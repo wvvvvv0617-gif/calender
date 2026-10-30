@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useShift } from '../context/ShiftContext';
 import { requestPersistentStorage } from '../utils/storageBackup';
+import { GoogleSignInButton } from './GoogleSignInButton';
 
 export const DataSafetyModal: React.FC = () => {
   const {
@@ -14,6 +15,17 @@ export const DataSafetyModal: React.FC = () => {
     presets,
     userName,
     showToast,
+    // Google Drive integration
+    googleUser,
+    isGoogleDriveConnected,
+    isDriveSyncing,
+    lastDriveSyncTime,
+    driveFileInfo,
+    connectGoogleDrive,
+    disconnectGoogleDrive,
+    refreshDriveStatus,
+    saveToDriveWithConfirm,
+    restoreFromDriveWithConfirm,
   } = useShift();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -25,14 +37,20 @@ export const DataSafetyModal: React.FC = () => {
   useEffect(() => {
     if (isDataSafetyModalOpen) {
       if (typeof window !== 'undefined' && navigator.storage && navigator.storage.persisted) {
-        navigator.storage.persisted().then((persisted) => {
-          setIsPersisted(persisted);
-        }).catch(() => {
-          setIsPersisted(false);
-        });
+        navigator.storage
+          .persisted()
+          .then((persisted) => {
+            setIsPersisted(persisted);
+          })
+          .catch(() => {
+            setIsPersisted(false);
+          });
+      }
+      if (isGoogleDriveConnected) {
+        refreshDriveStatus();
       }
     }
-  }, [isDataSafetyModalOpen]);
+  }, [isDataSafetyModalOpen, isGoogleDriveConnected]);
 
   if (!isDataSafetyModalOpen) return null;
 
@@ -42,7 +60,7 @@ export const DataSafetyModal: React.FC = () => {
     if (success) {
       showToast('🛡️ 브라우저 영구 보관(Persistent Storage)이 활성화되었습니다.');
     } else {
-      showToast('ℹ️ 브라우저 정책에 따라 [백업 파일 다운로드]로 보관하는 것을 권장합니다.');
+      showToast('ℹ️ 브라우저 정책에 따라 [구글 드라이브 동기화] 또는 [파일 다운로드]를 권장합니다.');
     }
   };
 
@@ -100,7 +118,9 @@ export const DataSafetyModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-[#131b2e]">데이터 자체 저장 &amp; 영구 보관</h2>
-              <p className="text-[11px] text-[#434655]">크롬 기록 삭제에도 사라지지 않는 영구 안전 보관소</p>
+              <p className="text-[11px] text-[#434655]">
+                크롬 기록 삭제에도 사라지지 않는 영구 안전 보관소
+              </p>
             </div>
           </div>
           <button
@@ -115,52 +135,143 @@ export const DataSafetyModal: React.FC = () => {
 
         {/* Scrollable Body */}
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
-          {/* Why Chrome deletes data Banner & Visual Checklist */}
-          <div className="p-4 rounded-2xl bg-[#fff8e1] border border-[#ffe082] text-xs flex flex-col gap-3">
-            <div className="flex items-center gap-1.5 font-bold text-[#b35300]">
-              <span className="material-symbols-outlined text-[20px]">help</span>
-              <span className="text-sm">클라우드 없이 영구 보존하는 방법 (크롬 설정)</span>
+          {/* TOP SOLUTION: Google Drive Cloud Integration */}
+          <div className="p-4 rounded-2xl bg-linear-to-br from-[#eff3ff] via-[#f7f9ff] to-[#eaf5ff] border-2 border-[#004ac6]/20 shadow-xs flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-[#004ac6]">
+                <span className="material-symbols-outlined text-[22px]">cloud_sync</span>
+                <span className="text-sm">구글 드라이브 무료 자동 연동 (가장 추천 ⭐⭐⭐)</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#004ac6] text-white">
+                Google 계정 100% 무료
+              </span>
             </div>
-            
-            <p className="text-[11px] text-[#5d4037] leading-relaxed">
-              웹 브라우저의 &apos;인터넷 사용 기록 삭제&apos; 메뉴에는 <strong>[쿠키 및 사이트 데이터]</strong>가 기본 체크되어 있습니다. 이 항목만 <strong>체크 해제</strong>하시면 클라우드 연동 없이도 근무 데이터가 절대 지워지지 않습니다!
+
+            <p className="text-[11px] text-[#434655] leading-relaxed">
+              사용 중인 구글 계정(Gmail)만 연결하면, 크롬 브라우저에서 쿠키나 방문 기록을 완전히 지워도
+              <strong> 내 구글 드라이브에 안전하게 영구 보관</strong>됩니다.
             </p>
 
-            {/* Visual Checklist Box */}
-            <div className="p-3 rounded-xl bg-white/95 border border-[#ffe082] shadow-2xs flex flex-col gap-2">
-              <span className="text-[11px] font-bold text-[#131b2e] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px] text-[#004ac6]">checklist</span>
-                <span>Chrome [기록 삭제] 창에서 이렇게 체크하세요:</span>
-              </span>
-              <div className="space-y-1.5 text-[11px]">
-                <div className="flex items-center gap-2 text-[#434655] px-2 py-1 rounded-lg bg-[#f2f3ff]">
-                  <span className="w-4 h-4 rounded bg-[#004ac6] text-white flex items-center justify-center text-[10px] font-bold">✓</span>
-                  <span><strong>인터넷 사용 기록</strong> (체크 유지 - 방문/검색기록 삭제)</span>
+            {!isGoogleDriveConnected ? (
+              <div className="flex flex-col items-center justify-center p-3 bg-white/80 rounded-xl border border-[#dbe1ff] gap-2.5">
+                <GoogleSignInButton
+                  onClick={connectGoogleDrive}
+                  isLoading={isDriveSyncing}
+                  text="Google 계정으로 구글 드라이브 연결"
+                  className="w-full justify-center shadow-xs"
+                />
+                <span className="text-[10px] text-[#737686]">
+                  * ShiftMate가 생성한 백업 파일(`ShiftMate_Backup_Data.json`)에만 안전하게 접근합니다.
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5 p-3.5 bg-white/95 rounded-xl border border-[#dbe1ff] shadow-2xs">
+                {/* Account info bar */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {googleUser?.photoURL ? (
+                      <img
+                        src={googleUser.photoURL}
+                        alt="Google avatar"
+                        className="w-7 h-7 rounded-full border border-[#004ac6]/30 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-[#004ac6] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                        G
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-[#131b2e] block truncate">
+                        {googleUser?.displayName || '구글 사용자'}
+                      </span>
+                      <span className="text-[10px] text-[#737686] block truncate">
+                        {googleUser?.email}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#6cf8bb]/30 text-[#006c49] flex items-center gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#006c49]"></span>
+                      연결됨
+                    </span>
+                    <button
+                      type="button"
+                      onClick={disconnectGoogleDrive}
+                      className="text-[10px] text-[#737686] hover:text-[#ad0033] underline px-1 cursor-pointer"
+                    >
+                      연결 해제
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-[#ad0033] px-2 py-1.5 rounded-lg bg-[#ffdad6]/60 border border-[#ad0033]/30 font-bold">
-                  <span className="w-4 h-4 rounded bg-[#ad0033] text-white flex items-center justify-center text-[11px] font-extrabold">✕</span>
-                  <span>쿠키 및 기타 사이트 데이터 (반드시 체크 해제! ★)</span>
+
+                {/* Drive file status */}
+                <div className="p-2.5 rounded-lg bg-[#f2f3ff] text-[11px] flex flex-col gap-1 border border-[#eaedff]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#131b2e] flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px] text-[#004ac6]">
+                        description
+                      </span>
+                      <span>보관 파일: ShiftMate_Backup_Data.json</span>
+                    </span>
+                    {driveFileInfo && (
+                      <span className="text-[10px] text-[#006c49] font-bold">드라이브 보관 중</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-[#737686] flex items-center justify-between">
+                    <span>
+                      {lastDriveSyncTime
+                        ? `마지막 동기화: ${lastDriveSyncTime}`
+                        : '아직 동기화된 내역이 없습니다.'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={refreshDriveStatus}
+                      disabled={isDriveSyncing}
+                      className="text-[#004ac6] hover:underline flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <span
+                        className={`material-symbols-outlined text-[12px] ${
+                          isDriveSyncing ? 'animate-spin' : ''
+                        }`}
+                      >
+                        refresh
+                      </span>
+                      <span>새로고침</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-[#434655] px-2 py-1 rounded-lg bg-[#f2f3ff]">
-                  <span className="w-4 h-4 rounded bg-[#004ac6] text-white flex items-center justify-center text-[10px] font-bold">✓</span>
-                  <span><strong>캐시된 이미지 및 파일</strong> (체크 유지 - 용량 확보)</span>
+
+                {/* Sync Actions */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={saveToDriveWithConfirm}
+                    disabled={isDriveSyncing}
+                    className="py-2.5 px-3 rounded-xl bg-[#004ac6] hover:bg-[#003ea8] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">cloud_upload</span>
+                    <span>구글 드라이브에 지금 저장</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={restoreFromDriveWithConfirm}
+                    disabled={isDriveSyncing}
+                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-[#eaedff] text-[#004ac6] border border-[#004ac6]/30 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">cloud_download</span>
+                    <span>드라이브에서 복원하기</span>
+                  </button>
                 </div>
               </div>
-              <p className="text-[10px] text-[#737686] leading-tight pt-1">
-                * 한 번만 체크를 풀어두면 Chrome이 이 설정을 기억하여 다음부터는 손댈 필요가 없습니다.
-              </p>
-            </div>
-
-            <p className="text-[11px] text-[#5d4037] leading-relaxed">
-              💡 <strong>더 안전한 방법:</strong> 아래 <strong>[내 기기에 파일 저장]</strong>을 눌러두시면 스마트폰 [내 파일] 폴더에 실제 파일로 영구 보관되어 브라우저 데이터를 완전히 초기화해도 언제든 1초 만에 복원할 수 있습니다!
-            </p>
+            )}
           </div>
 
           {/* Current Data Overview */}
           <div className="p-3 rounded-xl bg-[#f2f3ff] flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[#004ac6] text-[18px]">inventory_2</span>
-              <span className="font-semibold text-[#131b2e]">현재 보관된 데이터:</span>
+              <span className="font-semibold text-[#131b2e]">현재 기기에 등록된 데이터:</span>
             </div>
             <div className="flex items-center gap-2 text-[11px] font-bold text-[#004ac6]">
               <span>근무 {shifts.length}건</span>
@@ -174,32 +285,38 @@ export const DataSafetyModal: React.FC = () => {
           {/* Action 1: File Download & Upload */}
           <div className="flex flex-col gap-2">
             <span className="text-xs font-bold text-[#131b2e] flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px] text-[#004ac6]">download_for_offline</span>
-              <span>방법 1: 내 기기에 영구 파일로 저장 (추천 ⭐⭐⭐)</span>
+              <span className="material-symbols-outlined text-[16px] text-[#004ac6]">
+                download_for_offline
+              </span>
+              <span>방법 2: 내 기기 다운로드 폴더에 영구 파일로 저장</span>
             </span>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={exportAppData}
-                className="py-3 px-3.5 rounded-2xl bg-[#004ac6] hover:bg-[#003ea8] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+                className="py-3 px-3.5 rounded-2xl bg-[#283044] hover:bg-[#1f2537] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">file_download</span>
                 <div className="flex flex-col text-left">
                   <span>백업 파일 다운로드 (.json)</span>
-                  <span className="text-[10px] text-white/80 font-normal">스마트폰/PC 파일로 영구 저장</span>
+                  <span className="text-[10px] text-white/80 font-normal">
+                    스마트폰/PC 파일로 영구 저장
+                  </span>
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="py-3 px-3.5 rounded-2xl bg-white hover:bg-[#eaedff] text-[#004ac6] border-2 border-[#004ac6]/30 text-xs font-bold flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+                className="py-3 px-3.5 rounded-2xl bg-white hover:bg-[#eaedff] text-[#283044] border-2 border-[#283044]/30 text-xs font-bold flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">upload_file</span>
                 <div className="flex flex-col text-left">
                   <span>백업 파일 불러와 복원</span>
-                  <span className="text-[10px] text-[#737686] font-normal">저장해둔 파일로 1초 복원</span>
+                  <span className="text-[10px] text-[#737686] font-normal">
+                    저장해둔 파일로 1초 복원
+                  </span>
                 </div>
               </button>
 
@@ -217,7 +334,7 @@ export const DataSafetyModal: React.FC = () => {
           <div className="flex flex-col gap-2 pt-2 border-t border-[#eaedff]">
             <span className="text-xs font-bold text-[#131b2e] flex items-center gap-1">
               <span className="material-symbols-outlined text-[16px] text-[#006c49]">content_copy</span>
-              <span>방법 2: 카카오톡/메모장 텍스트 코드로 보관</span>
+              <span>방법 3: 카카오톡/메모장 텍스트 코드로 보관</span>
             </span>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -261,6 +378,40 @@ export const DataSafetyModal: React.FC = () => {
             )}
           </div>
 
+          {/* Chrome clear data explanation banner */}
+          <div className="p-3.5 rounded-2xl bg-[#fff8e1] border border-[#ffe082] text-xs flex flex-col gap-2.5">
+            <div className="flex items-center gap-1.5 font-bold text-[#b35300]">
+              <span className="material-symbols-outlined text-[18px]">help</span>
+              <span className="text-xs">크롬에서 기록 삭제 시 주의사항 (참고)</span>
+            </div>
+
+            <p className="text-[11px] text-[#5d4037] leading-relaxed">
+              크롬에서 [인터넷 사용 기록 삭제]를 할 때 <strong>[쿠키 및 기타 사이트 데이터]</strong>를
+              <strong> 체크 해제</strong>해 두시면 브라우저 내부 저장소도 함께 안전하게 보호됩니다.
+            </p>
+
+            <div className="p-2.5 rounded-xl bg-white/95 border border-[#ffe082] shadow-2xs space-y-1 text-[11px]">
+              <div className="flex items-center gap-2 text-[#434655]">
+                <span className="w-3.5 h-3.5 rounded bg-[#004ac6] text-white flex items-center justify-center text-[9px] font-bold">
+                  ✓
+                </span>
+                <span>인터넷 사용 기록 (체크 유지 가능)</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#ad0033] font-bold">
+                <span className="w-3.5 h-3.5 rounded bg-[#ad0033] text-white flex items-center justify-center text-[10px] font-extrabold">
+                  ✕
+                </span>
+                <span>쿠키 및 기타 사이트 데이터 (체크 해제 권장)</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#434655]">
+                <span className="w-3.5 h-3.5 rounded bg-[#004ac6] text-white flex items-center justify-center text-[9px] font-bold">
+                  ✓
+                </span>
+                <span>캐시된 이미지 및 파일 (체크 유지 가능)</span>
+              </div>
+            </div>
+          </div>
+
           {/* Action 3: Persistent Storage Permission */}
           <div className="flex flex-col gap-2 pt-2 border-t border-[#eaedff]">
             <div className="flex items-center justify-between">
@@ -278,13 +429,9 @@ export const DataSafetyModal: React.FC = () => {
                 <span className="material-symbols-outlined text-[12px]">
                   {isPersisted ? 'check_circle' : 'warning'}
                 </span>
-                <span>{isPersisted ? '활성화됨 (보호 중)' : '미활성 (권장)'}</span>
+                <span>{isPersisted ? '활성화됨 (보호 중)' : '미활성'}</span>
               </span>
             </div>
-
-            <p className="text-[11px] text-[#737686] leading-snug">
-              브라우저의 영구 보관 권한을 획득하면 크롬이 디스크 용량 부족 시에도 데이터를 자동으로 비우지 않도록 보호합니다.
-            </p>
 
             {!isPersisted && (
               <button
