@@ -41,6 +41,13 @@ jobs:
         run: npm run build
         env:
           VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
+
+      - name: Ensure 404.html for SPA routing
+        run: |
+          if [ -f "./dist/index.html" ] && [ ! -f "./dist/404.html" ]; then
+            cp ./dist/index.html ./dist/404.html
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

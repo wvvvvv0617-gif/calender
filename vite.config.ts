@@ -4,11 +4,34 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-export default defineConfig(() => {
-  const basePath = process.env.VITE_BASE || '/';
+export default defineConfig(({ command }) => {
+  // Resolve base path supporting VITE_BASE_PATH (GitHub Actions deploy.yml),
+  // VITE_BASE, GITHUB_REPOSITORY (e.g. username/calender -> /calender/), or default '/calender/' on build
+  const getBasePath = () => {
+    let raw = process.env.VITE_BASE_PATH || process.env.VITE_BASE || process.env.BASE_URL;
+    if (!raw && process.env.GITHUB_REPOSITORY) {
+      const parts = process.env.GITHUB_REPOSITORY.split('/');
+      const repo = parts[1];
+      if (repo && !repo.endsWith('.github.io')) {
+        raw = `/${repo}/`;
+      }
+    }
+    // Default to /calender/ on build so manual local builds and GitHub Pages work out of the box
+    if (!raw && command === 'build') {
+      raw = '/calender/';
+    }
+    if (!raw) return '/';
+    let formatted = raw.trim();
+    if (!formatted.startsWith('/')) formatted = '/' + formatted;
+    if (!formatted.endsWith('/')) formatted = formatted + '/';
+    return formatted;
+  };
+
+  const basePath = getBasePath();
   const normalizePath = (file: string) => {
-    if (basePath === '/') return `/${file}`;
-    return `${basePath.endsWith('/') ? basePath : basePath + '/'}${file}`;
+    const cleanFile = file.replace(/^\//, '');
+    if (basePath === '/') return `/${cleanFile}`;
+    return `${basePath}${cleanFile}`;
   };
 
   return {
