@@ -18,6 +18,7 @@ export const DataSafetyModal: React.FC = () => {
     // Google Drive integration
     googleUser,
     isGoogleDriveConnected,
+    hasActiveDriveToken,
     isDriveSyncing,
     lastDriveSyncTime,
     driveFileInfo,
@@ -26,6 +27,8 @@ export const DataSafetyModal: React.FC = () => {
     refreshDriveStatus,
     saveToDriveWithConfirm,
     restoreFromDriveWithConfirm,
+    authDomainError,
+    clearAuthDomainError,
   } = useShift();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,7 +50,7 @@ export const DataSafetyModal: React.FC = () => {
           });
       }
       if (isGoogleDriveConnected) {
-        refreshDriveStatus();
+        refreshDriveStatus({ interactive: false });
       }
     }
   }, [isDataSafetyModalOpen, isGoogleDriveConnected]);
@@ -137,12 +140,12 @@ export const DataSafetyModal: React.FC = () => {
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
           {/* TOP SOLUTION: Google Drive Cloud Integration */}
           <div className="p-4 rounded-2xl bg-linear-to-br from-[#eff3ff] via-[#f7f9ff] to-[#eaf5ff] border-2 border-[#004ac6]/20 shadow-xs flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-[#004ac6]">
-                <span className="material-symbols-outlined text-[22px]">cloud_sync</span>
-                <span className="text-sm">구글 드라이브 무료 자동 연동 (가장 추천 ⭐⭐⭐)</span>
+            <div className="flex items-center justify-between flex-wrap gap-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-[#004ac6]">
+                <span className="material-symbols-outlined text-[20px] sm:text-[22px]">cloud_sync</span>
+                <span className="text-xs sm:text-sm">구글 드라이브 자동 연동 (추천)</span>
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#004ac6] text-white">
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#004ac6] text-white shrink-0">
                 Google 계정 100% 무료
               </span>
             </div>
@@ -155,7 +158,7 @@ export const DataSafetyModal: React.FC = () => {
             {!isGoogleDriveConnected ? (
               <div className="flex flex-col items-center justify-center p-3 bg-white/80 rounded-xl border border-[#dbe1ff] gap-2.5">
                 <GoogleSignInButton
-                  onClick={connectGoogleDrive}
+                  onClick={() => connectGoogleDrive(false)}
                   isLoading={isDriveSyncing}
                   text="Google 계정으로 구글 드라이브 연결"
                   className="w-full justify-center shadow-xs"
@@ -163,6 +166,75 @@ export const DataSafetyModal: React.FC = () => {
                 <span className="text-[10px] text-[#737686]">
                   * ShiftMate가 생성한 백업 파일(`ShiftMate_Backup_Data.json`)에만 안전하게 접근합니다.
                 </span>
+
+                {authDomainError && (
+                  <div className="w-full mt-1 p-3.5 rounded-xl bg-[#fff8e1] border border-[#ffb74d] text-xs flex flex-col gap-2.5 text-left animate-in fade-in">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-1.5 font-bold text-[#b35300]">
+                        <span className="material-symbols-outlined text-[18px]">domain_verification</span>
+                        <span>Firebase 인증 승인 도메인 등록 필요</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearAuthDomainError}
+                        className="text-[#8d4000] hover:text-[#b35300] text-[11px] cursor-pointer"
+                      >
+                        닫기
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-[#5d4037] leading-relaxed">
+                      구글 OAuth 보안 정책상 현재 배포 주소(<strong>{authDomainError.domain}</strong>)를 Firebase 프로젝트의 <strong>승인된 도메인</strong>에 1회 등록하셔야 로그인이 허용됩니다. (약 30초 소요)
+                    </p>
+
+                    <div className="p-2.5 rounded-lg bg-white/95 border border-[#ffe082] flex flex-col gap-2 text-[11px]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[#434655] font-semibold">등록할 도메인 주소:</span>
+                        <div className="flex items-center gap-1.5">
+                          <code className="px-2 py-0.5 rounded bg-[#f2f3ff] text-[#004ac6] font-mono font-bold text-[11px]">
+                            {authDomainError.domain}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(authDomainError.domain);
+                                showToast('📋 도메인 주소가 복사되었습니다: ' + authDomainError.domain);
+                              } catch {
+                                showToast('직접 복사해주세요: ' + authDomainError.domain);
+                              }
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-[#004ac6] text-white text-[10px] font-bold hover:bg-[#003ea8] active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-[12px]">content_copy</span>
+                            <span>복사</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1 text-[11px] text-[#434655] pt-1 border-t border-[#f0f0f0]">
+                        <p><strong>1.</strong> 아래 주황색 버튼을 눌러 Firebase 콘솔 설정 페이지를 엽니다.</p>
+                        <p><strong>2.</strong> <strong>[승인된 도메인(Authorized domains)]</strong> 섹션에서 <strong>[도메인 추가]</strong> 클릭</p>
+                        <p><strong>3.</strong> 복사한 <code>{authDomainError.domain}</code> 붙여넣고 <strong>[저장]</strong></p>
+                        <p><strong>4.</strong> 완료 후 다시 위 <strong>[Google 계정으로 구글 드라이브 연결]</strong> 버튼 클릭!</p>
+                      </div>
+
+                      <a
+                        href={`https://console.firebase.google.com/project/${authDomainError.projectId}/authentication/settings`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 py-2 px-3 rounded-lg bg-[#e65100] hover:bg-[#bf360c] text-white font-bold text-center flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                      >
+                        <span>Firebase 콘솔 승인 도메인 설정 열기</span>
+                        <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                      </a>
+                    </div>
+
+                    <p className="text-[10px] text-[#737686]">
+                      💡 지금 즉시 백업이 필요하시다면 아래 <strong>방법 2: [백업 파일 다운로드]</strong>를 이용하시면 설정 없이도 1초 만에 안전하게 기기에 저장됩니다.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-2.5 p-3.5 bg-white/95 rounded-xl border border-[#dbe1ff] shadow-2xs">
@@ -189,15 +261,24 @@ export const DataSafetyModal: React.FC = () => {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#6cf8bb]/30 text-[#006c49] flex items-center gap-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#006c49]"></span>
                       연결됨
                     </span>
                     <button
                       type="button"
+                      onClick={() => connectGoogleDrive(true)}
+                      disabled={isDriveSyncing}
+                      className="text-[10px] text-[#004ac6] hover:underline px-1 cursor-pointer disabled:opacity-50"
+                    >
+                      계정 전환
+                    </button>
+                    <button
+                      type="button"
                       onClick={disconnectGoogleDrive}
-                      className="text-[10px] text-[#737686] hover:text-[#ad0033] underline px-1 cursor-pointer"
+                      disabled={isDriveSyncing}
+                      className="text-[10px] text-[#737686] hover:text-[#ad0033] underline px-1 cursor-pointer disabled:opacity-50"
                     >
                       연결 해제
                     </button>
@@ -206,28 +287,28 @@ export const DataSafetyModal: React.FC = () => {
 
                 {/* Drive file status */}
                 <div className="p-2.5 rounded-lg bg-[#f2f3ff] text-[11px] flex flex-col gap-1 border border-[#eaedff]">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-[#131b2e] flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[15px] text-[#004ac6]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[#131b2e] flex items-center gap-1 truncate">
+                      <span className="material-symbols-outlined text-[15px] text-[#004ac6] shrink-0">
                         description
                       </span>
-                      <span>보관 파일: ShiftMate_Backup_Data.json</span>
+                      <span className="truncate">보관 파일: ShiftMate_Backup_Data.json</span>
                     </span>
-                    {driveFileInfo && (
-                      <span className="text-[10px] text-[#006c49] font-bold">드라이브 보관 중</span>
+                    {(driveFileInfo || lastDriveSyncTime) && (
+                      <span className="text-[10px] text-[#006c49] font-bold shrink-0">드라이브 보관 중</span>
                     )}
                   </div>
-                  <div className="text-[10px] text-[#737686] flex items-center justify-between">
-                    <span>
+                  <div className="text-[10px] text-[#737686] flex items-center justify-between gap-2">
+                    <span className="truncate">
                       {lastDriveSyncTime
                         ? `마지막 동기화: ${lastDriveSyncTime}`
                         : '아직 동기화된 내역이 없습니다.'}
                     </span>
                     <button
                       type="button"
-                      onClick={refreshDriveStatus}
+                      onClick={() => refreshDriveStatus({ interactive: true })}
                       disabled={isDriveSyncing}
-                      className="text-[#004ac6] hover:underline flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
+                      className="text-[#004ac6] hover:underline flex items-center gap-0.5 cursor-pointer disabled:opacity-50 shrink-0"
                     >
                       <span
                         className={`material-symbols-outlined text-[12px] ${
@@ -239,6 +320,11 @@ export const DataSafetyModal: React.FC = () => {
                       <span>새로고침</span>
                     </button>
                   </div>
+                  {!hasActiveDriveToken && (
+                    <div className="text-[10px] text-[#004ac6]/85 pt-0.5 border-t border-[#dbe1ff]/60">
+                      저장·복원·새로고침 클릭 시 연결된 계정으로 자동 인증됩니다.
+                    </div>
+                  )}
                 </div>
 
                 {/* Sync Actions */}
@@ -268,12 +354,12 @@ export const DataSafetyModal: React.FC = () => {
           </div>
 
           {/* Current Data Overview */}
-          <div className="p-3 rounded-xl bg-[#f2f3ff] flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
+          <div className="p-3 rounded-xl bg-[#f2f3ff] flex items-center justify-between flex-wrap gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[#004ac6] text-[18px]">inventory_2</span>
-              <span className="font-semibold text-[#131b2e]">현재 기기에 등록된 데이터:</span>
+              <span className="font-semibold text-[#131b2e]">현재 기기 데이터:</span>
             </div>
-            <div className="flex items-center gap-2 text-[11px] font-bold text-[#004ac6]">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#004ac6] tabular-nums">
               <span>근무 {shifts.length}건</span>
               <span>·</span>
               <span>사업장 {workplaces.length}곳</span>

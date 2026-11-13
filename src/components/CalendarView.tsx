@@ -31,12 +31,26 @@ export const CalendarView: React.FC = () => {
     weekStartsOn,
     setWeekStartsOn,
     openDataSafetyModal,
+    hasPendingDriveBackup,
+    isGoogleDriveConnected,
+    hasUsedDriveBefore,
+    saveToDriveWithConfirm,
   } = useShift();
 
   const [calendarViewMode, setCalendarViewMode] = useState<'monthly' | 'weekly' | 'list'>('monthly');
   const [listFilter, setListFilter] = useState<'all' | 'work' | 'leave'>('all');
   const [draggedPresetId, setDraggedPresetId] = useState<string | null>(null);
   const [draggedFromDate, setDraggedFromDate] = useState<string | null>(null);
+  const [isQuickBarOpen, setIsQuickBarOpen] = useState<boolean>(true);
+
+  const handleExitQuickStamp = (toastText?: string) => {
+    setIsQuickStampActive(false);
+    setQuickStampPresetId(null);
+    if (toastText) showToast(toastText);
+    if (hasPendingDriveBackup && (isGoogleDriveConnected || hasUsedDriveBefore)) {
+      saveToDriveWithConfirm();
+    }
+  };
 
   // Map of presets for quick theme resolution
   const presetMap = useMemo(() => {
@@ -389,16 +403,16 @@ export const CalendarView: React.FC = () => {
   };
 
   return (
-    <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-7xl mx-auto px-3 sm:px-4 md:px-6 pt-2">
+    <div className="w-full flex flex-col gap-3 sm:gap-4 pb-24 sm:pb-28 md:pb-12 max-w-7xl mx-auto px-2 sm:px-4 md:px-6 pt-1 sm:pt-2">
       {/* Auto-Save & Empty State Helpful Prompt with Instant Restore */}
       {shifts.length === 0 && (
-        <div className="p-4 rounded-2xl bg-[#eaedff] border border-[#004ac6]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-start gap-2.5">
-            <span className="material-symbols-outlined text-[#004ac6] text-[22px] shrink-0 mt-0.5">info</span>
+        <div className="p-3 sm:p-4 rounded-2xl bg-[#eaedff] border border-[#004ac6]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shadow-xs">
+          <div className="flex items-start gap-2">
+            <span className="material-symbols-outlined text-[#004ac6] text-[20px] shrink-0 mt-0.5">info</span>
             <div className="text-xs text-[#131b2e] leading-relaxed">
               <span className="font-bold">현재 등록된 근무가 없습니다.</span>
               <p className="text-[11px] text-[#434655] mt-0.5">
-                구글 계정/크롬 기록삭제로 데이터가 초기화되었거나 기기를 새로 접속하셨다면, 백업 파일로 1초 만에 복원하실 수 있습니다.
+                데이터가 초기화되었거나 기기를 새로 접속하셨다면 백업으로 1초 만에 복원하실 수 있습니다.
               </p>
             </div>
           </div>
@@ -408,24 +422,24 @@ export const CalendarView: React.FC = () => {
               className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#dbe1ff] text-[#004ac6] border border-[#004ac6]/30 text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
             >
               <span className="material-symbols-outlined text-[16px]">upload_file</span>
-              <span>백업 파일로 복원</span>
+              <span>백업 복원</span>
             </button>
             <button
               onClick={loadSampleData}
               className="px-3 py-1.5 rounded-xl bg-[#004ac6] hover:bg-[#003ea8] text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
             >
-              샘플 데이터 로드
+              샘플 로드
             </button>
           </div>
         </div>
       )}
 
       {/* 1. Monthly Financial Summary Card */}
-      <section className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-3 relative overflow-hidden">
+      <section className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-2.5 sm:gap-3 relative overflow-hidden">
         <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full bg-[#004ac6]/10 blur-2xl pointer-events-none"></div>
 
-        <div className="flex items-center justify-between relative z-10 flex-wrap gap-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between relative z-10 flex-wrap gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1">
             <span className="text-xs font-semibold text-[#434655]">{month}월 예상 수령액</span>
             <button
               aria-label="급여 상세 안내"
@@ -436,19 +450,19 @@ export const CalendarView: React.FC = () => {
               <span className="material-symbols-outlined text-[16px]">help</span>
             </button>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={openDataSafetyModal}
-              className="inline-flex items-center gap-1 bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 text-[#006c49] border border-[#006c49]/20 px-2.5 py-0.5 rounded-full font-bold text-xs transition-all active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1 bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 text-[#006c49] border border-[#006c49]/20 px-2 py-0.5 rounded-full font-bold text-[11px] sm:text-xs transition-all active:scale-95 cursor-pointer"
               title="크롬 기록삭제 대비 데이터 백업 및 복원"
             >
-              <span className="material-symbols-outlined text-[14px]">shield</span>
-              <span>데이터 안전보관</span>
+              <span className="material-symbols-outlined text-[13px] sm:text-[14px]">shield</span>
+              <span>안전보관</span>
             </button>
-            <div className="inline-flex items-center gap-1 bg-[#eaedff] px-2.5 py-0.5 rounded-full text-[#004ac6] font-bold text-xs">
-              <span className="material-symbols-outlined text-[14px]">event_available</span>
-              <span>급여일 {paydayDDay.dDayText} ({paydayDDay.paydayFormatted})</span>
+            <div className="inline-flex items-center gap-1 bg-[#eaedff] px-2 py-0.5 rounded-full text-[#004ac6] font-bold text-[11px] sm:text-xs tabular-nums">
+              <span className="material-symbols-outlined text-[13px] sm:text-[14px]">event_available</span>
+              <span>급여 {paydayDDay.dDayText} ({paydayDDay.paydayFormatted})</span>
             </div>
           </div>
         </div>
@@ -456,34 +470,36 @@ export const CalendarView: React.FC = () => {
         {/* Main Amount Display */}
         <div className="flex flex-col gap-0.5 relative z-10">
           <div className="flex items-baseline gap-1">
-            <span className="text-3xl md:text-4xl font-extrabold text-[#004ac6] tracking-tight">
+            <span className="text-2xl min-[380px]:text-3xl md:text-4xl font-extrabold text-[#004ac6] tracking-tight tabular-nums">
               {formatKRW(currentMonthlySummary.netPay)}
             </span>
-            <span className="text-lg font-bold text-[#131b2e]">원</span>
+            <span className="text-base sm:text-lg font-bold text-[#131b2e]">원</span>
           </div>
-          <div className="flex items-center gap-1 text-[#006c49] text-xs font-semibold">
-            <span className="material-symbols-outlined text-[16px]">trending_up</span>
-            <span>2026 최저시급({formatKRW(activeWorkplace.hourlyWage)}원) 및 주휴수당 자동 산정 중</span>
+          <div className="flex items-center gap-1 text-[#006c49] text-[11px] sm:text-xs font-semibold">
+            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">trending_up</span>
+            <span className="truncate tabular-nums">
+              시급 {formatKRW(activeWorkplace.hourlyWage)}원 · 주휴수당 자동 산정
+            </span>
           </div>
         </div>
 
         {/* Micro Stats Bento Grid (Responsive on Galaxy Fold & Tablets) */}
-        <div className="grid grid-cols-3 gap-2 pt-1 relative z-10">
-          <div className="bg-[#f2f3ff] rounded-xl p-2.5 flex flex-col">
-            <span className="text-[11px] font-medium text-[#434655]">총 근무</span>
-            <span className="text-sm font-bold text-[#131b2e] mt-0.5">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-0.5 relative z-10">
+          <div className="bg-[#f2f3ff] rounded-xl p-2 sm:p-2.5 flex flex-col min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-medium text-[#434655] truncate">총 근무</span>
+            <span className="text-xs min-[380px]:text-sm font-bold text-[#131b2e] mt-0.5 tabular-nums whitespace-nowrap">
               {currentMonthlySummary.totalWorkedHours}시간
             </span>
           </div>
-          <div className="bg-[#6ffbbe]/25 rounded-xl p-2.5 flex flex-col">
-            <span className="text-[11px] font-bold text-[#006c49]">주휴수당(4주)</span>
-            <span className="text-sm font-bold text-[#006c49] mt-0.5">
+          <div className="bg-[#6ffbbe]/25 rounded-xl p-2 sm:p-2.5 flex flex-col min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-bold text-[#006c49] truncate">주휴수당</span>
+            <span className="text-xs min-[380px]:text-sm font-bold text-[#006c49] mt-0.5 tabular-nums whitespace-nowrap truncate">
               +{formatKRW(currentMonthlySummary.weeklyHolidayPay)}원
             </span>
           </div>
-          <div className="bg-[#ffdad6]/40 rounded-xl p-2.5 flex flex-col">
-            <span className="text-[11px] font-bold text-[#ad0033]">공제액</span>
-            <span className="text-sm font-bold text-[#ad0033] mt-0.5">
+          <div className="bg-[#ffdad6]/40 rounded-xl p-2 sm:p-2.5 flex flex-col min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-bold text-[#ad0033] truncate">공제액</span>
+            <span className="text-xs min-[380px]:text-sm font-bold text-[#ad0033] mt-0.5 tabular-nums whitespace-nowrap truncate">
               -{formatKRW(currentMonthlySummary.totalDeductions)}원
             </span>
           </div>
@@ -492,60 +508,64 @@ export const CalendarView: React.FC = () => {
 
       {/* 2. Month/Week Navigation & Segmented View Controls */}
       <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           {calendarViewMode === 'weekly' ? (
-            <div className="flex items-center gap-2">
-              <button
-                aria-label="이전 주"
-                onClick={handlePrevWeek}
-                className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-              </button>
-              <h2 className="text-lg md:text-xl font-bold text-[#131b2e] tracking-tight">
-                {weekDays[0].monthNumber}.{weekDays[0].dateNumber} ~ {weekDays[6].monthNumber}.{weekDays[6].dateNumber} 주간
-              </h2>
-              <button
-                aria-label="다음 주"
-                onClick={handleNextWeek}
-                className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-              </button>
+            <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  aria-label="이전 주"
+                  onClick={handlePrevWeek}
+                  className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                </button>
+                <h2 className="text-base min-[380px]:text-lg md:text-xl font-bold text-[#131b2e] tracking-tight tabular-nums">
+                  {weekDays[0].monthNumber}.{weekDays[0].dateNumber} ~ {weekDays[6].monthNumber}.{weekDays[6].dateNumber}
+                </h2>
+                <button
+                  aria-label="다음 주"
+                  onClick={handleNextWeek}
+                  className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+              </div>
               <button
                 onClick={handleGoToThisWeek}
-                className="px-2.5 py-1 rounded-full bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all shadow-xs active:scale-95 ml-1 cursor-pointer"
+                className="px-2.5 py-1 rounded-full bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
                 title="이번 주 날짜로 이동"
               >
                 이번 주
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <button
-                aria-label="이전 달"
-                onClick={handlePrevMonth}
-                className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-              </button>
-              <h2 className="text-xl font-bold text-[#131b2e] tracking-tight">
-                {year}년 {month}월
-              </h2>
-              <button
-                aria-label="다음 달"
-                onClick={handleNextMonth}
-                className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-              </button>
+            <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  aria-label="이전 달"
+                  onClick={handlePrevMonth}
+                  className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                </button>
+                <h2 className="text-lg sm:text-xl font-bold text-[#131b2e] tracking-tight tabular-nums">
+                  {year}년 {month}월
+                </h2>
+                <button
+                  aria-label="다음 달"
+                  onClick={handleNextMonth}
+                  className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-90 transition-all flex items-center justify-center text-[#131b2e] cursor-pointer"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+              </div>
               <button
                 onClick={goToToday}
-                className="px-2.5 py-1 rounded-full bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all shadow-xs active:scale-95 ml-1 cursor-pointer"
+                className="px-2.5 py-1 rounded-full bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
                 title="오늘 날짜로 이동"
               >
                 오늘
@@ -554,23 +574,23 @@ export const CalendarView: React.FC = () => {
           )}
 
           {/* PDF Export & View Filter Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between sm:justify-end gap-1.5 flex-wrap">
             <button
               aria-label="이번 달 근무기록 PDF 내보내기"
               onClick={() => openPdfModal('timesheet')}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#dbe1ff]/60 hover:bg-[#dbe1ff] text-[#004ac6] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#dbe1ff]/60 hover:bg-[#dbe1ff] text-[#004ac6] text-[11px] sm:text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
               type="button"
             >
-              <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
-              <span>인쇄/PDF</span>
+              <span className="material-symbols-outlined text-[15px]">picture_as_pdf</span>
+              <span>PDF</span>
             </button>
 
             {/* Calendar Start Day Toggle (일~토 / 월~일) */}
-            <div className="flex items-center bg-[#eaedff] rounded-full p-0.5 text-xs font-semibold">
+            <div className="flex items-center bg-[#eaedff] rounded-full p-0.5 text-[11px] sm:text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => setWeekStartsOn('sun')}
-                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                className={`px-2 py-1 rounded-full transition-all cursor-pointer ${
                   weekStartsOn === 'sun'
                     ? 'bg-white text-[#004ac6] shadow-xs font-bold'
                     : 'text-[#434655] hover:text-[#131b2e]'
@@ -582,7 +602,7 @@ export const CalendarView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setWeekStartsOn('mon')}
-                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                className={`px-2 py-1 rounded-full transition-all cursor-pointer ${
                   weekStartsOn === 'mon'
                     ? 'bg-white text-[#004ac6] shadow-xs font-bold'
                     : 'text-[#434655] hover:text-[#131b2e]'
@@ -594,10 +614,10 @@ export const CalendarView: React.FC = () => {
             </div>
 
             {/* Segmented Switcher for Monthly / Weekly / List */}
-            <div className="flex items-center bg-[#eaedff] rounded-full p-0.5 text-xs font-semibold">
+            <div className="flex items-center bg-[#eaedff] rounded-full p-0.5 text-[11px] sm:text-xs font-semibold">
               <button
                 onClick={() => setCalendarViewMode('monthly')}
-                className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
                   calendarViewMode === 'monthly'
                     ? 'bg-white text-[#004ac6] shadow-xs font-bold'
                     : 'text-[#434655] hover:text-[#131b2e]'
@@ -608,7 +628,7 @@ export const CalendarView: React.FC = () => {
               </button>
               <button
                 onClick={() => setCalendarViewMode('weekly')}
-                className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
                   calendarViewMode === 'weekly'
                     ? 'bg-white text-[#004ac6] shadow-xs font-bold'
                     : 'text-[#434655] hover:text-[#131b2e]'
@@ -619,7 +639,7 @@ export const CalendarView: React.FC = () => {
               </button>
               <button
                 onClick={() => setCalendarViewMode('list')}
-                className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
                   calendarViewMode === 'list'
                     ? 'bg-white text-[#004ac6] shadow-xs font-bold'
                     : 'text-[#434655] hover:text-[#131b2e]'
@@ -637,16 +657,22 @@ export const CalendarView: React.FC = () => {
 
       {/* VIEW A: MONTHLY VIEW (Full 7-Column Grid with Red Holidays and Preset-matching Selected Color) */}
       {calendarViewMode === 'monthly' && (
-        <section className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col">
+        <section className="bg-white rounded-2xl p-2 sm:p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col">
           {/* Quick Stamp Mode Banner */}
-          <div className="mb-3 px-3 py-2 rounded-xl bg-[#dbe1ff]/50 border border-[#004ac6]/20 flex items-center justify-between text-xs flex-wrap gap-2">
-            <div className="flex items-center gap-2 text-[#004ac6] font-bold">
-              <span className="material-symbols-outlined text-[18px]">touch_app</span>
-              <span>
-                스탬프 모드:{' '}
+          <div className="mb-2 sm:mb-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#dbe1ff]/50 border border-[#004ac6]/20 flex items-center justify-between text-xs flex-wrap gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[#004ac6] font-bold flex-wrap">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">touch_app</span>
+              <span className="text-[11px] sm:text-xs">
+                스탬프:{' '}
                 <button
-                  onClick={() => setIsQuickStampActive(!isQuickStampActive)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer transition-all ${
+                  onClick={() => {
+                    if (isQuickStampActive) {
+                      handleExitQuickStamp('원터치 등록 모드가 해제되었습니다.');
+                    } else {
+                      setIsQuickStampActive(true);
+                    }
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold cursor-pointer transition-all ${
                     isQuickStampActive ? 'bg-[#004ac6] text-white' : 'bg-[#737686] text-white'
                   }`}
                 >
@@ -654,37 +680,38 @@ export const CalendarView: React.FC = () => {
                 </button>
               </span>
               {activeQuickPreset && (
-                <span className="px-2 py-0.5 rounded bg-[#004ac6]/10 text-[#004ac6] text-[11px] font-semibold">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded bg-[#004ac6]/10 text-[#004ac6] text-[10px] sm:text-[11px] font-semibold">
                   {activeQuickPreset.name} ({activeQuickPreset.startTime}-{activeQuickPreset.endTime})
                 </span>
               )}
             </div>
-            <span className="text-[#434655] text-[11px] flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px] text-[#ad0033]">delete</span>
-              <span>우클릭 또는 꾹 누르면 삭제 · 하단 휴지통으로 드래그 삭제</span>
+            <span className="text-[#434655] text-[10px] sm:text-[11px] flex items-center gap-1">
+              <span className="material-symbols-outlined text-[13px] sm:text-[14px] text-[#ad0033]">delete</span>
+              <span className="sm:hidden">날짜 꾹 눌러 삭제</span>
+              <span className="hidden sm:inline">우클릭 또는 꾹 누르면 삭제 · 하단 휴지통으로 드래그 삭제</span>
             </span>
           </div>
 
           {/* Monthly Public Holidays Summary Banner (공휴일 요약 표시) */}
           {monthHolidays.length > 0 && (
-            <div className="mb-2.5 px-3 py-2 rounded-xl bg-[#fff5f5] border border-[#ffcdd2]/70 flex items-center gap-2 text-xs flex-wrap">
-              <span className="font-extrabold text-[#b30026] flex items-center gap-1 shrink-0">
-                <span className="w-2 h-2 rounded-full bg-[#b30026] animate-pulse"></span>
-                이달의 법정공휴일:
+            <div className="mb-2 sm:mb-2.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#fff5f5] border border-[#ffcdd2]/70 flex items-center gap-1.5 sm:gap-2 text-xs flex-wrap">
+              <span className="font-extrabold text-[#b30026] flex items-center gap-1 shrink-0 text-[11px] sm:text-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#b30026]"></span>
+                이달의 공휴일:
               </span>
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
                 {monthHolidays.map((h) => (
                   <button
                     key={h.dateStr}
                     type="button"
                     onClick={() => setSelectedDate(h.dateStr)}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                       selectedDate === h.dateStr
                         ? 'bg-[#b30026] text-white shadow-xs'
                         : 'bg-white text-[#b30026] hover:bg-[#ffebee] border border-[#ffcdd2]'
                     }`}
                   >
-                    <span>{month}.{h.day}</span>
+                    <span className="tabular-nums">{month}.{h.day}</span>
                     <span>{h.name}</span>
                   </button>
                 ))}
@@ -693,7 +720,7 @@ export const CalendarView: React.FC = () => {
           )}
 
           {/* Day of Week Headers (Starts Sunday or Monday according to weekStartsOn) */}
-          <div className="grid grid-cols-7 text-center pb-2 text-xs font-semibold">
+          <div className="grid grid-cols-7 text-center pb-1.5 sm:pb-2 text-[11px] sm:text-xs font-semibold">
             {weekStartsOn === 'sun' ? (
               <>
                 <span className="text-[#b30026]">일</span>
@@ -718,7 +745,7 @@ export const CalendarView: React.FC = () => {
           </div>
 
           {/* Calendar 7-Column Grid */}
-          <div className="grid grid-cols-7 gap-y-2 gap-x-1 sm:gap-x-1.5 text-center" id="calendarGrid">
+          <div className="grid grid-cols-7 gap-y-1 sm:gap-y-2 gap-x-0.5 sm:gap-x-1.5 text-center" id="calendarGrid">
             {calendarDays.map((cell) => {
               const shift = shiftMap.get(cell.dateStr);
               const isSelected = selectedDate === cell.dateStr;
@@ -768,11 +795,11 @@ export const CalendarView: React.FC = () => {
                         }
                       : undefined
                   }
-                  className={`flex flex-col items-center py-1.5 px-0.5 rounded-xl transition-all min-h-[70px] sm:min-h-[76px] md:min-h-[82px] relative cursor-pointer select-none border ${
+                  className={`flex flex-col items-center py-1 sm:py-1.5 px-0.5 rounded-lg sm:rounded-xl transition-all min-h-[58px] sm:min-h-[76px] md:min-h-[82px] relative cursor-pointer select-none border ${
                     !cell.isCurrentMonth ? 'opacity-35' : ''
                   } ${
                     isSelected
-                      ? 'border-2 shadow-sm scale-[1.02]'
+                      ? 'border-2 shadow-sm scale-[1.01] sm:scale-[1.02]'
                       : isToday
                       ? isHoliday
                         ? 'bg-[#ffebee]/70 border-[#b30026]/40'
@@ -797,7 +824,7 @@ export const CalendarView: React.FC = () => {
                             }
                           : undefined
                       }
-                      className={`text-xs font-bold flex items-center justify-center w-6 h-6 rounded-full transition-all ${
+                      className={`text-[11px] sm:text-xs font-bold tabular-nums flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full transition-all ${
                         isSelected
                           ? 'shadow-xs font-black'
                           : isToday
@@ -814,15 +841,15 @@ export const CalendarView: React.FC = () => {
                       {cell.dayNumber}
                     </span>
                     {isToday && (
-                      <span className={`w-1.5 h-1.5 rounded-full ${isHoliday ? 'bg-[#b30026]' : 'bg-[#004ac6]'}`}></span>
+                      <span className={`hidden sm:inline-block w-1.5 h-1.5 rounded-full ${isHoliday ? 'bg-[#b30026]' : 'bg-[#004ac6]'}`}></span>
                     )}
                   </div>
 
                   {/* Public Holiday Tag Badge (날짜 아래에 어떤 공휴일인지 빨간색으로 표기) */}
                   {holiday && (
-                    <div className="w-full flex justify-center px-0.5 my-0.5">
+                    <div className="w-full flex justify-center px-0.5 mt-0.5">
                       <span
-                        className="text-[10px] sm:text-[11px] leading-tight font-black text-[#b30026] bg-[#ffebee] border border-[#ffcdd2] px-1 py-0.5 rounded text-center truncate max-w-full shadow-2xs tracking-tighter block"
+                        className="text-[9px] sm:text-[10px] leading-tight font-black text-[#b30026] bg-[#ffebee] border border-[#ffcdd2] px-0.5 sm:px-1 py-0.2 sm:py-0.5 rounded text-center truncate max-w-full shadow-2xs tracking-tighter block"
                         title={holiday.name}
                       >
                         {holiday.name}
@@ -832,9 +859,9 @@ export const CalendarView: React.FC = () => {
 
                   {/* Shift Tag Chip */}
                   {shift && (
-                    <div className="mt-1 w-full px-0.5 relative group">
+                    <div className="mt-0.5 sm:mt-1 w-full px-0.5 relative group">
                       <span
-                        className="block truncate px-1 py-0.5 rounded font-bold text-[10px] leading-tight"
+                        className="block truncate px-0.5 sm:px-1 py-0.5 rounded font-bold text-[9px] sm:text-[10px] leading-tight"
                         style={{
                           backgroundColor: palette.softBgHex,
                           color: palette.hex,
@@ -843,8 +870,9 @@ export const CalendarView: React.FC = () => {
                         {shift.type === 'leave' ? shift.leaveType || '휴무' : shift.name}
                       </span>
                       {shift.overtimeHours && shift.overtimeHours > 0 ? (
-                        <span className="mt-0.5 block truncate px-1 py-0.2 rounded font-extrabold text-[9px] leading-tight bg-[#ffeed9] text-[#b35300] border border-[#ffdbb8]/70 text-center">
-                          +{shift.overtimeHours}h 연장
+                        <span className="mt-0.5 block truncate px-0.5 sm:px-1 py-0.2 rounded font-extrabold text-[8px] sm:text-[9px] leading-tight bg-[#ffeed9] text-[#b35300] border border-[#ffdbb8]/70 text-center tabular-nums">
+                          <span className="min-[390px]:hidden">+{shift.overtimeHours}h</span>
+                          <span className="hidden min-[390px]:inline">+{shift.overtimeHours}h 연장</span>
                         </span>
                       ) : null}
 
@@ -1254,26 +1282,26 @@ export const CalendarView: React.FC = () => {
             ? '#b3002650'
             : '#c3c6d740',
         }}
-        className="bg-white rounded-2xl p-4 shadow-sm border flex flex-col gap-2.5 relative transition-all"
+        className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border flex flex-col gap-2 sm:gap-2.5 relative transition-all"
       >
         {/* Public Holiday Banner if Selected Date is a holiday */}
         {selectedDateHoliday && (
-          <div className="p-3 rounded-xl bg-[#ffebee] border border-[#ffcdd2] flex items-center justify-between text-xs text-[#b30026] font-bold animate-in fade-in flex-wrap gap-2">
+          <div className="p-2.5 sm:p-3 rounded-xl bg-[#ffebee] border border-[#ffcdd2] flex items-center justify-between text-xs text-[#b30026] font-bold animate-in fade-in flex-wrap gap-1.5 sm:gap-2">
             <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[20px] text-[#b30026]">celebration</span>
-              <span className="text-sm font-extrabold">법정 공휴일: {selectedDateHoliday.name}</span>
+              <span className="material-symbols-outlined text-[18px] sm:text-[20px] text-[#b30026]">celebration</span>
+              <span className="text-xs sm:text-sm font-extrabold">법정 공휴일: {selectedDateHoliday.name}</span>
             </div>
-            <span className="text-[11px] font-semibold text-[#b30026] px-2 py-0.5 rounded bg-white/80 border border-[#ffcdd2]">
-              휴일근로 가산수당(1.5배) 규정 적용 대상
+            <span className="text-[10px] sm:text-[11px] font-semibold text-[#b30026] px-2 py-0.5 rounded bg-white/80 border border-[#ffcdd2]">
+              휴일근로 가산(1.5배)
             </span>
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             {/* Color-matched Selected Date Badge */}
             <span
-              className="px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-xs"
+              className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-white shadow-xs shrink-0"
               style={{
                 backgroundColor: selectedDateHoliday
                   ? '#b30026'
@@ -1284,17 +1312,19 @@ export const CalendarView: React.FC = () => {
             >
               선택일
             </span>
-            <span className="text-base font-bold text-[#131b2e]">{selectedDateFormatted} 근무 상세</span>
+            <span className="text-sm sm:text-base font-bold text-[#131b2e] truncate">
+              {selectedDateFormatted} 근무 상세
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 shrink-0">
             {selectedShift && (
               <button
                 onClick={() => {
                   deleteShiftByDate(selectedDate);
                   showToast(`${selectedDate} 근무가 삭제되었습니다.`);
                 }}
-                className="flex items-center gap-1 text-xs text-[#ad0033] hover:bg-[#ffdad6]/40 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer"
+                className="flex items-center gap-1 text-xs text-[#ad0033] hover:bg-[#ffdad6]/40 px-2 sm:px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer"
                 title="해당 날짜 근무 삭제"
               >
                 <span className="material-symbols-outlined text-[15px]">delete</span>
@@ -1303,7 +1333,7 @@ export const CalendarView: React.FC = () => {
             )}
             <button
               onClick={() => setActiveTab('add-shift')}
-              className="text-[#434655] hover:text-[#004ac6] transition-colors flex items-center gap-0.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#f2f3ff] cursor-pointer"
+              className="text-[#434655] hover:text-[#004ac6] transition-colors flex items-center gap-0.5 text-xs font-semibold px-2 sm:px-2.5 py-1 rounded-lg bg-[#f2f3ff] cursor-pointer"
               type="button"
             >
               <span>{selectedShift ? '편집' : '등록'}</span>
@@ -1319,12 +1349,12 @@ export const CalendarView: React.FC = () => {
               backgroundColor: selectedDatePalette.softBgHex + '25',
               borderColor: selectedDatePalette.hex + '30',
             }}
-            className="rounded-xl p-3.5 flex flex-col gap-2 border"
+            className="rounded-xl p-3 sm:p-3.5 flex flex-col gap-2 border"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <span
-                  className="material-symbols-outlined text-[20px]"
+                  className="material-symbols-outlined text-[19px] sm:text-[20px] shrink-0"
                   style={{ color: selectedDatePalette.hex }}
                 >
                   {selectedShift.type === 'leave'
@@ -1333,12 +1363,12 @@ export const CalendarView: React.FC = () => {
                     ? 'science'
                     : 'local_cafe'}
                 </span>
-                <span className="text-sm font-bold text-[#131b2e]">
+                <span className="text-xs sm:text-sm font-bold text-[#131b2e] truncate">
                   {activeWorkplace.name} · {selectedShift.name}
                 </span>
               </div>
               <span
-                className="px-2 py-0.5 rounded text-xs font-bold"
+                className="px-2 py-0.5 rounded text-[11px] sm:text-xs font-bold shrink-0"
                 style={{
                   backgroundColor: selectedDatePalette.softBgHex,
                   color: selectedDatePalette.hex,
@@ -1348,7 +1378,7 @@ export const CalendarView: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-[#434655] pt-0.5 flex-wrap gap-1">
+            <div className="flex items-center justify-between text-[11px] sm:text-xs text-[#434655] pt-0.5 flex-wrap gap-1 tabular-nums">
               <span>
                 시간: {selectedShift.startTime} ~ {selectedShift.endTime} (
                 {selectedShiftCalc?.workedHours || 0}시간
@@ -1362,23 +1392,25 @@ export const CalendarView: React.FC = () => {
 
             {/* Overtime Row in Selected Date Detail */}
             {selectedShift.overtimeHours && selectedShift.overtimeHours > 0 ? (
-              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-[#fff8f2] border border-[#ffdbb8] text-[#b35300]">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <span className="material-symbols-outlined text-[16px]">more_time</span>
-                  <span>
+              <div className="flex items-center justify-between text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-[#fff8f2] border border-[#ffdbb8] text-[#b35300] gap-2">
+                <div className="flex items-center gap-1 font-bold min-w-0">
+                  <span className="material-symbols-outlined text-[15px] shrink-0">more_time</span>
+                  <span className="truncate">
                     추가근무 {selectedShift.overtimeHours}시간 (
-                    {selectedShift.hasOvertimeBonus !== false ? '1.5배 가산' : '일반 시급'} 적용)
+                    {selectedShift.hasOvertimeBonus !== false ? '1.5배 가산' : '일반 시급'})
                   </span>
                 </div>
-                <span className="font-extrabold text-sm">+{formatKRW(selectedShiftCalc?.overtimePay || 0)}원</span>
+                <span className="font-extrabold text-xs sm:text-sm tabular-nums shrink-0">
+                  +{formatKRW(selectedShiftCalc?.overtimePay || 0)}원
+                </span>
               </div>
             ) : null}
 
             {/* Wage Highlight Row */}
-            <div className="flex items-center justify-between pt-2 mt-1 bg-white rounded-lg px-3 py-2 border border-[#eaedff]">
+            <div className="flex items-center justify-between pt-1.5 mt-0.5 bg-white rounded-lg px-2.5 sm:px-3 py-2 border border-[#eaedff]">
               <span className="text-xs font-medium text-[#434655]">일 예상 급여</span>
               <span
-                className="text-base font-extrabold"
+                className="text-sm sm:text-base font-extrabold tabular-nums"
                 style={{ color: selectedDatePalette.hex }}
               >
                 {formatKRW(selectedShiftCalc?.totalShiftPay || 0)}원
@@ -1386,11 +1418,11 @@ export const CalendarView: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="bg-[#f2f3ff] rounded-xl p-4 flex items-center justify-between">
+          <div className="bg-[#f2f3ff] rounded-xl p-3 sm:p-4 flex items-center justify-between gap-2">
             <span className="text-xs text-[#737686]">등록된 근무나 휴무 일정이 없습니다.</span>
             <button
               onClick={() => setActiveTab('add-shift')}
-              className="px-3 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer shrink-0"
             >
               + 근무 등록
             </button>
@@ -1399,193 +1431,203 @@ export const CalendarView: React.FC = () => {
       </section>
 
       {/* 5. Timesheet Document Bar */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-[#dbe1ff]/60 text-[#004ac6] flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[22px]">description</span>
+      <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#dbe1ff]/60 text-[#004ac6] flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px]">description</span>
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-bold text-[#131b2e] truncate">
+            <span className="text-xs sm:text-sm font-bold text-[#131b2e] truncate">
               {month}월 근무표 및 출퇴근 확인서
             </span>
-            <span className="text-xs text-[#434655] truncate">
-              총 {currentMonthlySummary.totalWorkedHours}시간 · 세무·급여 증빙용 문서/PDF
+            <span className="text-[11px] sm:text-xs text-[#434655] truncate tabular-nums">
+              총 {currentMonthlySummary.totalWorkedHours}시간 · 세무/급여 증빙 PDF
             </span>
           </div>
         </div>
         <button
           type="button"
           onClick={() => openPdfModal('timesheet')}
-          className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#004ac6] text-white text-xs font-bold shadow-xs hover:bg-[#004ac6]/90 active:scale-95 transition-all cursor-pointer"
+          className="shrink-0 inline-flex items-center gap-1 px-2.5 sm:px-3 py-2 rounded-xl bg-[#004ac6] text-white text-[11px] sm:text-xs font-bold shadow-xs hover:bg-[#004ac6]/90 active:scale-95 transition-all cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[16px]">download</span>
-          <span>PDF/문서 저장</span>
+          <span className="material-symbols-outlined text-[15px] sm:text-[16px]">download</span>
+          <span>PDF 저장</span>
         </button>
       </div>
 
-      {/* 6. Sticky Quick Preset Action Bar + Trash Drop Zone */}
-      <div className="sticky bottom-18 md:bottom-4 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-xl flex flex-col gap-2 border border-[#eaedff]">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1 text-[#004ac6] text-xs font-bold">
-            <span className="material-symbols-outlined text-[16px]">bolt</span>
-            <span>원터치 퀵 등록 & 드래그 배정</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-[#004ac6]/10 text-[#004ac6] text-[10px] font-bold">
-              선택일: {selectedDate.slice(5)}
+      {/* 6. Sticky Quick Preset Action Bar + Trash Drop Zone (Compact & Collapsible on Narrow Screens) */}
+      <div className="sticky bottom-17 sm:bottom-18 md:bottom-4 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-2 sm:p-3 shadow-xl flex flex-col gap-1.5 sm:gap-2 border border-[#eaedff]">
+        <div className="flex items-center justify-between gap-1 px-0.5 sm:px-1">
+          <div className="flex items-center gap-1 text-[#004ac6] text-[11px] sm:text-xs font-bold min-w-0">
+            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">bolt</span>
+            <span className="truncate">원터치 퀵 등록</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-[#004ac6]/10 text-[#004ac6] text-[10px] font-bold tabular-nums shrink-0">
+              {selectedDate.slice(5)}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={openDataSafetyModal}
-              className="text-[#006c49] bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+              className="hidden min-[380px]:flex text-[#006c49] bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold items-center gap-1 cursor-pointer transition-all active:scale-95"
               type="button"
               title="크롬 기록삭제 대비 데이터 자체 보관 및 복원"
             >
-              <span className="material-symbols-outlined text-[15px]">security</span>
-              <span>데이터 안전보관</span>
+              <span className="material-symbols-outlined text-[14px]">security</span>
+              <span className="hidden sm:inline">데이터 안전보관</span>
+              <span className="sm:hidden">백업</span>
             </button>
             <button
               onClick={() => openPresetModal()}
-              className="text-[#004ac6] hover:underline text-xs font-bold flex items-center gap-0.5 cursor-pointer"
+              className="text-[#004ac6] hover:underline text-[11px] sm:text-xs font-bold flex items-center gap-0.5 cursor-pointer px-1"
               type="button"
             >
               <span className="material-symbols-outlined text-[15px]">add</span>
               <span>새 프리셋</span>
             </button>
-          </div>
-        </div>
-
-        {/* Dynamic Tip / Active Stamp Banner */}
-        {isQuickStampActive && quickStampPresetId ? (
-          <div className="px-3 py-2 rounded-xl bg-[#004ac6] text-white flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="material-symbols-outlined text-[18px] text-[#ffe082]">touch_app</span>
-              <div className="text-xs font-semibold truncate">
-                <strong>[{presets.find((p) => p.id === quickStampPresetId)?.name || '프리셋'}]</strong> 선택됨 → 달력에서 원하는 날짜(여러 개 연속 가능)를 누르세요!
-              </div>
-            </div>
             <button
               type="button"
-              onClick={() => {
-                setIsQuickStampActive(false);
-                setQuickStampPresetId(null);
-                showToast('원터치 등록 모드가 해제되었습니다.');
-              }}
-              className="shrink-0 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+              onClick={() => setIsQuickBarOpen((prev) => !prev)}
+              className="w-7 h-7 rounded-lg bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] flex items-center justify-center cursor-pointer sm:hidden"
+              aria-label={isQuickBarOpen ? '퀵 등록 바 접기' : '퀵 등록 바 펼치기'}
+              title={isQuickBarOpen ? '접기' : '펼치기'}
             >
-              <span>선택 해제</span>
-              <span className="material-symbols-outlined text-[14px]">close</span>
+              <span className="material-symbols-outlined text-[17px]">
+                {isQuickBarOpen ? 'expand_more' : 'expand_less'}
+              </span>
             </button>
           </div>
-        ) : (
-          <div className="px-2.5 py-1.5 rounded-lg bg-[#f2f3ff] flex items-center justify-between gap-1 text-[11px] text-[#434655] leading-tight">
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[#004ac6] text-[15px] shrink-0">touch_app</span>
-              <span>
-                <strong className="text-[#131b2e] font-semibold">원터치 등록:</strong> 아래 프리셋을 먼저 누른 후, 달력에서 원하는 날짜를 누르면 적용됩니다. (기존 선택일이 바로 바뀌지 않음)
-              </span>
-            </div>
-            <span className="material-symbols-outlined text-[#737686] text-[14px] shrink-0">drag_indicator</span>
-          </div>
-        )}
+        </div>
 
-        {/* Horizontal Quick Preset Chips + Trash Can Drop Zone */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-0.5 pt-0.5">
-          {presets.map((preset) => {
-            const isSelectedForStamp = isQuickStampActive && quickStampPresetId === preset.id;
-            const presetPal = PRESET_COLOR_PALETTES[preset.colorTheme || preset.badgeTheme] || PRESET_COLOR_PALETTES.blue;
-            return (
-              <button
-                key={preset.id}
-                draggable
-                onDragStart={() => setDraggedPresetId(preset.id)}
-                onClick={() => {
-                  if (isQuickStampActive && quickStampPresetId === preset.id) {
-                    setIsQuickStampActive(false);
-                    setQuickStampPresetId(null);
-                    showToast(`'${preset.name}' 원터치 등록 모드가 해제되었습니다.`);
-                  } else {
-                    setQuickStampPresetId(preset.id);
-                    setIsQuickStampActive(true);
-                    showToast(`'${preset.name}' 선택됨! 달력에서 날짜를 누르면 적용됩니다.`);
-                  }
-                }}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-left cursor-grab active:scale-95 transition-all ${
-                  isSelectedForStamp
-                    ? 'bg-white border-2 shadow-xs ring-2'
-                    : 'bg-[#f2f3ff] hover:bg-[#eaedff] border border-transparent'
-                }`}
-                style={
-                  isSelectedForStamp
-                    ? {
-                        borderColor: presetPal.hex,
-                        boxShadow: `0 0 0 2px ${presetPal.hex}25`,
+        {(isQuickBarOpen || isQuickStampActive) && (
+          <>
+            {/* Dynamic Tip / Active Stamp Banner */}
+            {isQuickStampActive && quickStampPresetId ? (
+              <div className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#004ac6] text-white flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-[#ffe082] shrink-0">touch_app</span>
+                  <div className="text-[11px] sm:text-xs font-semibold truncate">
+                    <strong>[{presets.find((p) => p.id === quickStampPresetId)?.name || '프리셋'}]</strong> → 달력 날짜를 연속 탭!
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleExitQuickStamp('원터치 등록 모드가 해제되었습니다.')}
+                  className="shrink-0 px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+                >
+                  <span>완료/해제</span>
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+            ) : (
+              <div className="hidden sm:flex px-2.5 py-1.5 rounded-lg bg-[#f2f3ff] items-center justify-between gap-1 text-[11px] text-[#434655] leading-tight">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#004ac6] text-[15px] shrink-0">touch_app</span>
+                  <span>
+                    <strong className="text-[#131b2e] font-semibold">원터치 등록:</strong> 아래 프리셋을 먼저 누른 후, 달력에서 원하는 날짜를 누르면 적용됩니다.
+                  </span>
+                </div>
+                <span className="material-symbols-outlined text-[#737686] text-[14px] shrink-0">drag_indicator</span>
+              </div>
+            )}
+
+            {/* Horizontal Quick Preset Chips + Trash Can Drop Zone */}
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 pt-0.5">
+              {presets.map((preset) => {
+                const isSelectedForStamp = isQuickStampActive && quickStampPresetId === preset.id;
+                const presetPal = PRESET_COLOR_PALETTES[preset.colorTheme || preset.badgeTheme] || PRESET_COLOR_PALETTES.blue;
+                return (
+                  <button
+                    key={preset.id}
+                    draggable
+                    onDragStart={() => setDraggedPresetId(preset.id)}
+                    onClick={() => {
+                      if (isQuickStampActive && quickStampPresetId === preset.id) {
+                        handleExitQuickStamp(`'${preset.name}' 원터치 등록 모드가 해제되었습니다.`);
+                      } else {
+                        setQuickStampPresetId(preset.id);
+                        setIsQuickStampActive(true);
+                        showToast(`'${preset.name}' 선택됨! 달력에서 날짜를 누르면 적용됩니다.`);
                       }
-                    : undefined
-                }
+                    }}
+                    className={`shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-left cursor-grab active:scale-95 transition-all ${
+                      isSelectedForStamp
+                        ? 'bg-white border-2 shadow-xs ring-2'
+                        : 'bg-[#f2f3ff] hover:bg-[#eaedff] border border-transparent'
+                    }`}
+                    style={
+                      isSelectedForStamp
+                        ? {
+                            borderColor: presetPal.hex,
+                            boxShadow: `0 0 0 2px ${presetPal.hex}25`,
+                          }
+                        : undefined
+                    }
+                    type="button"
+                  >
+                    <div
+                      className="flex items-center"
+                      style={{ color: presetPal.hex }}
+                    >
+                      <span className="hidden sm:inline material-symbols-outlined text-[15px] text-[#737686] opacity-60">
+                        drag_indicator
+                      </span>
+                      <span className="material-symbols-outlined text-[17px] sm:text-[18px] sm:ml-0.5">
+                        {isSelectedForStamp ? 'check_circle' : 'add_circle'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col pr-0.5 sm:pr-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] sm:text-xs font-bold text-[#131b2e]">{preset.name}</span>
+                        {isSelectedForStamp && (
+                          <span
+                            className="text-[9px] px-1 rounded text-white font-bold"
+                            style={{ backgroundColor: presetPal.hex }}
+                          >
+                            활성
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-[#434655] tabular-nums">
+                        {preset.startTime}-{preset.endTime}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Dedicated Trash / Remove Drop Zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDrop={handleTrashDrop}
+                onClick={() => {
+                  deleteShiftByDate(selectedDate);
+                  showToast(`${selectedDate} 근무가 삭제되었습니다.`);
+                }}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-[#ffdad6]/50 hover:bg-[#ffdad6] text-[#ad0033] border border-[#ad0033]/30 cursor-pointer active:scale-95 transition-all"
+                title="여기로 근무를 드래그하거나 클릭하여 선택일 근무 삭제"
+              >
+                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">delete</span>
+                <div className="flex flex-col">
+                  <span className="text-[11px] sm:text-xs font-bold">선택일 삭제</span>
+                  <span className="text-[9px] sm:text-[10px] text-[#ad0033]/80">탭/드롭</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => openPresetModal()}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-dashed border-[#c3c6d7] hover:bg-[#eaedff] text-[#004ac6] active:scale-95 transition-all text-left cursor-pointer"
                 type="button"
               >
-                <div
-                  className="flex items-center"
-                  style={{ color: presetPal.hex }}
-                >
-                  <span className="material-symbols-outlined text-[15px] text-[#737686] opacity-60">
-                    drag_indicator
-                  </span>
-                  <span className="material-symbols-outlined text-[18px] ml-0.5">
-                    {isSelectedForStamp ? 'check_circle' : 'add_circle'}
-                  </span>
-                </div>
-                <div className="flex flex-col pr-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold text-[#131b2e]">{preset.name}</span>
-                    {isSelectedForStamp && (
-                      <span
-                        className="text-[9px] px-1 rounded text-white font-bold"
-                        style={{ backgroundColor: presetPal.hex }}
-                      >
-                        활성
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-[#434655]">
-                    {preset.startTime}-{preset.endTime}
-                  </span>
+                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">add_circle_outline</span>
+                <div className="flex flex-col">
+                  <span className="text-[11px] sm:text-xs font-bold text-[#004ac6]">새 프리셋</span>
+                  <span className="text-[9px] sm:text-[10px] text-[#434655]">시간/색상</span>
                 </div>
               </button>
-            );
-          })}
-
-          {/* Dedicated Trash / Remove Drop Zone */}
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleTrashDrop}
-            onClick={() => {
-              deleteShiftByDate(selectedDate);
-              showToast(`${selectedDate} 근무가 삭제되었습니다.`);
-            }}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#ffdad6]/50 hover:bg-[#ffdad6] text-[#ad0033] border border-[#ad0033]/30 cursor-pointer active:scale-95 transition-all"
-            title="여기로 근무를 드래그하거나 클릭하여 선택일 근무 삭제"
-          >
-            <span className="material-symbols-outlined text-[18px]">delete</span>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold">드래그 삭제</span>
-              <span className="text-[10px] text-[#ad0033]/80">휴지통에 드롭</span>
             </div>
-          </div>
-
-          <button
-            onClick={() => openPresetModal()}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-[#c3c6d7] hover:bg-[#eaedff] text-[#004ac6] active:scale-95 transition-all text-left cursor-pointer"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[18px]">add_circle_outline</span>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-[#004ac6]">새 프리셋 추가</span>
-              <span className="text-[10px] text-[#434655]">시간/색상 설정</span>
-            </div>
-          </button>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

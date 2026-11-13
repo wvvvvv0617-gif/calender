@@ -89,31 +89,31 @@ export const PayrollView: React.FC = () => {
   const savingsGoalPercent = Math.min(100, Math.round((currentMonthlySummary.netPay / savingsGoalTarget) * 100)) || 74;
 
   return (
-    <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-4xl mx-auto px-4 md:px-6 pt-2">
+    <div className="w-full flex flex-col gap-3 sm:gap-4 pb-24 sm:pb-28 md:pb-12 max-w-4xl mx-auto px-2.5 sm:px-4 md:px-6 pt-1 sm:pt-2">
       {/* Month & Target Selector Header */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <button
               aria-label="이전 달"
               onClick={handlePrevMonth}
-              className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] active:scale-95 transition-all"
+              className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] active:scale-95 transition-all shrink-0"
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_left</span>
             </button>
-            <span className="text-xl font-bold text-[#131b2e] tracking-tight">
+            <span className="text-lg sm:text-xl font-bold text-[#131b2e] tracking-tight tabular-nums truncate">
               {year}년 {month}월 급여
             </span>
             <button
               aria-label="다음 달"
               onClick={handleNextMonth}
-              className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] active:scale-95 transition-all"
+              className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] active:scale-95 transition-all shrink-0"
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_right</span>
             </button>
-            <span className="px-2.5 py-0.5 bg-[#dbe1ff] text-[#00174b] text-[11px] font-bold rounded-full">
+            <span className="hidden min-[360px]:inline-block px-2 py-0.5 bg-[#dbe1ff] text-[#00174b] text-[10px] sm:text-[11px] font-bold rounded-full shrink-0">
               예상 정산
             </span>
           </div>
@@ -145,28 +145,28 @@ export const PayrollView: React.FC = () => {
       </div>
 
       {/* Hero Net Pay Highlight Card with 3.3% vs 4대보험 Switcher */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#004ac6] via-[#2563eb] to-[#0053db] rounded-3xl p-5 text-white shadow-lg flex flex-col gap-3.5">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#004ac6] via-[#2563eb] to-[#0053db] rounded-3xl p-4 sm:p-5 text-white shadow-lg flex flex-col gap-3 sm:gap-3.5">
         <div className="absolute -right-8 -bottom-8 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
 
-        <div className="flex items-center justify-between relative z-10">
+        <div className="flex items-center justify-between relative z-10 gap-2">
           <span className="text-xs font-semibold tracking-wider text-[#dbe1ff]">
             {month}월 예상 실수령액
           </span>
-          <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-white font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#6ffbbe] animate-pulse"></span>
+          <span className="flex items-center gap-1.5 text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-white/20 backdrop-blur-md text-white font-medium shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6ffbbe]"></span>
             실시간 자동계산
           </span>
         </div>
 
         <div className="flex flex-col gap-0.5 relative z-10">
           <div className="flex items-baseline gap-1">
-            <span className="text-3xl md:text-4xl font-extrabold tracking-tight">
+            <span className="text-2xl min-[380px]:text-3xl md:text-4xl font-extrabold tracking-tight tabular-nums">
               {formatKRW(currentMonthlySummary.netPay)}
             </span>
-            <span className="text-lg font-bold">원</span>
+            <span className="text-base sm:text-lg font-bold">원</span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-[#dbe1ff]">
+          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#dbe1ff] flex-wrap tabular-nums">
             <span>
               총 지급액{' '}
               <strong className="text-white font-bold">
@@ -185,13 +185,13 @@ export const PayrollView: React.FC = () => {
 
         {/* Mode Switch Pills */}
         <div className="pt-1 relative z-10">
-          <div className="p-1 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-between text-xs gap-1">
+          <div className="p-1 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-between text-[11px] sm:text-xs gap-1">
             <button
               onClick={() => {
                 setTaxOption('freelance');
                 showToast('3.3% 사업소득세 원천징수 기준으로 정산되었습니다.');
               }}
-              className={`flex-1 py-1.5 px-2 rounded-xl font-bold text-center transition-all ${
+              className={`flex-1 py-1.5 px-1.5 sm:px-2 rounded-xl font-bold text-center transition-all ${
                 taxOption === 'freelance'
                   ? 'bg-white text-[#004ac6] shadow-sm'
                   : 'text-[#dbe1ff] hover:text-white'
@@ -205,7 +205,7 @@ export const PayrollView: React.FC = () => {
                 setTaxOption('insurance');
                 showToast('4대 사회보험 요율(약 9.4%) 기준으로 재계산되었습니다.');
               }}
-              className={`flex-1 py-1.5 px-2 rounded-xl font-bold text-center transition-all ${
+              className={`flex-1 py-1.5 px-1.5 sm:px-2 rounded-xl font-bold text-center transition-all ${
                 taxOption === 'insurance'
                   ? 'bg-white text-[#004ac6] shadow-sm'
                   : 'text-[#dbe1ff] hover:text-white'
@@ -219,44 +219,44 @@ export const PayrollView: React.FC = () => {
       </div>
 
       {/* Key Metrics Bento Grid */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <div className="p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5">
+        <div className="p-2.5 sm:p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20 min-w-0">
           <div className="flex items-center gap-1 text-[#434655]">
-            <span className="material-symbols-outlined text-[16px]">work_history</span>
-            <span className="text-[11px] font-medium">출근 일수</span>
+            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">work_history</span>
+            <span className="text-[10px] sm:text-[11px] font-medium truncate">출근 일수</span>
           </div>
-          <p className="text-base font-bold text-[#131b2e] mt-1.5">
+          <p className="text-sm sm:text-base font-bold text-[#131b2e] mt-1.5 tabular-nums">
             {currentMonthlySummary.totalWorkDays}
-            <span className="text-xs text-[#434655] font-normal ml-0.5">일</span>
+            <span className="text-[11px] sm:text-xs text-[#434655] font-normal ml-0.5">일</span>
           </p>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20">
+        <div className="p-2.5 sm:p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20 min-w-0">
           <div className="flex items-center gap-1 text-[#434655]">
-            <span className="material-symbols-outlined text-[16px]">schedule</span>
-            <span className="text-[11px] font-medium">총 시간</span>
+            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">schedule</span>
+            <span className="text-[10px] sm:text-[11px] font-medium truncate">총 시간</span>
           </div>
           <div>
-            <p className="text-base font-bold text-[#131b2e] mt-1.5">
+            <p className="text-sm sm:text-base font-bold text-[#131b2e] mt-1.5 tabular-nums">
               {currentMonthlySummary.totalWorkedHours}
-              <span className="text-xs text-[#434655] font-normal ml-0.5">h</span>
+              <span className="text-[11px] sm:text-xs text-[#434655] font-normal ml-0.5">h</span>
             </p>
             {currentMonthlySummary.totalOvertimeHours > 0 && (
-              <span className="text-[10px] text-[#b35300] font-bold block leading-tight">
-                연장 {currentMonthlySummary.totalOvertimeHours}h 포함
+              <span className="text-[9px] sm:text-[10px] text-[#b35300] font-bold block leading-tight truncate">
+                연장 {currentMonthlySummary.totalOvertimeHours}h
               </span>
             )}
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20">
+        <div className="p-2.5 sm:p-3.5 rounded-2xl bg-[#f2f3ff] flex flex-col justify-between border border-[#c3c6d7]/20 min-w-0">
           <div className="flex items-center gap-1 text-[#434655]">
-            <span className="material-symbols-outlined text-[16px]">trending_up</span>
-            <span className="text-[11px] font-medium">실효 시급</span>
+            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">trending_up</span>
+            <span className="text-[10px] sm:text-[11px] font-medium truncate">실효 시급</span>
           </div>
-          <p className="text-base font-bold text-[#004ac6] mt-1.5">
+          <p className="text-sm sm:text-base font-bold text-[#004ac6] mt-1.5 tabular-nums whitespace-nowrap truncate">
             {formatKRW(currentMonthlySummary.effectiveHourlyRate)}
-            <span className="text-xs text-[#434655] font-normal ml-0.5">원</span>
+            <span className="text-[11px] sm:text-xs text-[#434655] font-normal ml-0.5">원</span>
           </p>
         </div>
       </div>
@@ -339,20 +339,20 @@ export const PayrollView: React.FC = () => {
           </div>
 
           {/* Weekly Badges */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-1 sm:gap-2">
             {[1, 2, 3, 4].map((wk, idx) => {
               const earned = currentMonthlySummary.weeklyHolidayEarned[idx] || shifts.length > 0;
               return (
                 <div
                   key={wk}
-                  className="p-2 rounded-xl bg-[#f2f3ff] flex flex-col items-center justify-center text-center"
+                  className="p-1.5 sm:p-2 rounded-xl bg-[#f2f3ff] flex flex-col items-center justify-center text-center"
                 >
-                  <span className="text-[11px] text-[#434655] font-medium">{wk}주차</span>
+                  <span className="text-[10px] sm:text-[11px] text-[#434655] font-medium">{wk}주차</span>
                   <div className="flex items-center gap-0.5 mt-0.5 text-[#006c49]">
-                    <span className="material-symbols-outlined text-[14px]">
+                    <span className="material-symbols-outlined text-[13px] sm:text-[14px]">
                       {earned ? 'check_circle' : 'schedule'}
                     </span>
-                    <span className="text-xs font-bold">8h</span>
+                    <span className="text-[11px] sm:text-xs font-bold tabular-nums">8h</span>
                   </div>
                 </div>
               );
@@ -614,7 +614,7 @@ export const PayrollView: React.FC = () => {
           <span>PDF 급여명세서 내보내기</span>
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
           <button
             onClick={() => {
               if (navigator.clipboard) {
@@ -622,10 +622,10 @@ export const PayrollView: React.FC = () => {
               }
               showToast('🔗 점주 확인용 정산 요약 링크가 복사되었습니다.');
             }}
-            className="flex-1 h-12 rounded-xl bg-white hover:bg-[#f2f3ff] text-[#131b2e] text-xs font-bold active:scale-[0.985] transition-all flex items-center justify-center gap-1.5 shadow-xs border border-[#c3c6d7]/30"
+            className="h-11 sm:h-12 px-2.5 rounded-xl bg-white hover:bg-[#f2f3ff] text-[#131b2e] text-[11px] sm:text-xs font-bold active:scale-[0.985] transition-all flex items-center justify-center gap-1.5 shadow-xs border border-[#c3c6d7]/30"
             type="button"
           >
-            <span className="material-symbols-outlined text-[18px]">share</span>
+            <span className="material-symbols-outlined text-[17px] sm:text-[18px]">share</span>
             <span>점주님께 공유</span>
           </button>
 
@@ -634,11 +634,11 @@ export const PayrollView: React.FC = () => {
               setIsVerifyModalOpen(true);
               showToast(`✅ 올해(${todayYear}년) 대한민국 근로기준법 및 최저임금법 기준 검증이 완료되었습니다!`);
             }}
-            className="flex-1 h-12 rounded-xl bg-white hover:bg-[#f2f3ff] text-[#131b2e] text-xs font-bold active:scale-[0.985] transition-all flex items-center justify-center gap-1.5 shadow-xs border border-[#c3c6d7]/30 cursor-pointer"
+            className="h-11 sm:h-12 px-2.5 rounded-xl bg-white hover:bg-[#f2f3ff] text-[#131b2e] text-[11px] sm:text-xs font-bold active:scale-[0.985] transition-all flex items-center justify-center gap-1.5 shadow-xs border border-[#c3c6d7]/30 cursor-pointer"
             type="button"
           >
-            <span className="material-symbols-outlined text-[18px] text-[#006c49]">verified</span>
-            <span>계산 검증 요청 (올해 {todayYear}년 법정)</span>
+            <span className="material-symbols-outlined text-[17px] sm:text-[18px] text-[#006c49]">verified</span>
+            <span className="truncate">계산 검증 ({todayYear} 법정)</span>
           </button>
         </div>
       </div>

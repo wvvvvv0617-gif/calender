@@ -234,7 +234,7 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-4xl mx-auto px-4 md:px-6 pt-2">
+    <div className="w-full flex flex-col gap-3.5 sm:gap-4 pb-24 sm:pb-28 md:pb-12 max-w-4xl mx-auto px-2.5 sm:px-4 md:px-6 pt-1 sm:pt-2">
       {/* Header Banner */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col">
@@ -253,18 +253,18 @@ export const SettingsView: React.FC = () => {
 
       {/* User Profile Section with Direct Name/Nickname Editor */}
       <section className="bg-white rounded-2xl p-4 shadow-sm border border-[#c3c6d7]/30 flex flex-col gap-3.5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="relative cursor-pointer" onClick={openProfileModal} title="사진 변경">
+            <div className="relative cursor-pointer shrink-0" onClick={openProfileModal} title="사진 변경">
               {profileImage ? (
                 <img
                   src={profileImage}
                   alt={userName}
-                  className="w-13 h-13 rounded-2xl object-cover ring-2 ring-[#004ac6]/30 shadow-xs"
+                  className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl object-cover ring-2 ring-[#004ac6]/30 shadow-xs"
                 />
               ) : (
-                <div className="w-13 h-13 rounded-2xl bg-[#eaedff] text-[#004ac6] flex items-center justify-center text-2xl border border-[#c3c6d7]/40 shadow-xs">
-                  <span className="material-symbols-outlined text-[30px]">person</span>
+                <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-[#eaedff] text-[#004ac6] flex items-center justify-center text-2xl border border-[#c3c6d7]/40 shadow-xs">
+                  <span className="material-symbols-outlined text-[28px] sm:text-[30px]">person</span>
                 </div>
               )}
               <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#004ac6] text-white flex items-center justify-center shadow-xs text-[11px]">
@@ -282,13 +282,13 @@ export const SettingsView: React.FC = () => {
                   안전 저장 활성화됨
                 </span>
               </div>
-              <p className="text-xs text-[#434655] mt-0.5">
-                현재 선택된 근무처: <strong>{activeWorkplace.name}</strong> ({activeWorkplace.role})
+              <p className="text-xs text-[#434655] mt-0.5 truncate">
+                현재 근무처: <strong>{activeWorkplace.name}</strong> ({activeWorkplace.role})
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
             {profileImage && (
               <button
                 type="button"
@@ -320,7 +320,7 @@ export const SettingsView: React.FC = () => {
               근무일지, 달력, 급여명세서에 표기되며 브라우저 종료 후 재접속 시에도 유지됩니다.
             </span>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <input
               type="text"
               value={inputUserName}
@@ -329,7 +329,7 @@ export const SettingsView: React.FC = () => {
                 if (e.key === 'Enter') handleSaveUserName();
               }}
               placeholder="예: 홍길동 연구원, 매니저"
-              className="px-3 py-1.5 rounded-xl bg-white text-xs font-bold text-[#131b2e] border border-[#c3c6d7]/50 focus:border-[#004ac6] focus:ring-1 focus:ring-[#004ac6] outline-none w-44 sm:w-52 shadow-2xs"
+              className="px-3 py-1.5 rounded-xl bg-white text-xs font-bold text-[#131b2e] border border-[#c3c6d7]/50 focus:border-[#004ac6] focus:ring-1 focus:ring-[#004ac6] outline-none flex-1 min-w-0 sm:w-52 shadow-2xs"
             />
             <button
               type="button"
@@ -463,7 +463,7 @@ export const SettingsView: React.FC = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-2">
                 {minimumWages.map((item) => (
                   <button
                     key={item.year}
@@ -472,7 +472,7 @@ export const SettingsView: React.FC = () => {
                       updateWorkplace({ hourlyWage: item.wage });
                       showToast(`${item.year}년 최저시급 (${item.wage.toLocaleString()}원)이 적용되었습니다.`);
                     }}
-                    className={`py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all ${
+                    className={`py-1.5 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all tabular-nums ${
                       item.year === 2026
                         ? 'bg-[#dbe1ff] text-[#004ac6] ring-1 ring-[#004ac6]'
                         : 'bg-white hover:bg-[#eaedff] text-[#131b2e] border border-[#c3c6d7]/30'
@@ -481,7 +481,7 @@ export const SettingsView: React.FC = () => {
                     <span>{item.year}년</span>
                     <span>{formatKRW(item.wage)}원</span>
                     {item.year === 2026 && (
-                      <span className="bg-[#004ac6] text-white text-[9px] px-1 py-0.2 rounded font-bold">
+                      <span className="hidden min-[370px]:inline bg-[#004ac6] text-white text-[9px] px-1 py-0.2 rounded font-bold">
                         현재
                       </span>
                     )}
@@ -726,7 +726,7 @@ export const SettingsView: React.FC = () => {
                       setPaydayOption(day);
                       showToast(`급여일이 ${label}로 설정되었습니다.`);
                     }}
-                    className={`py-2 px-2.5 rounded-xl text-xs transition-colors ${
+                    className={`py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs transition-colors tabular-nums ${
                       isSelected
                         ? 'bg-[#004ac6] text-white font-bold shadow-xs'
                         : 'bg-[#f2f3ff] text-[#131b2e] hover:bg-[#eaedff]'

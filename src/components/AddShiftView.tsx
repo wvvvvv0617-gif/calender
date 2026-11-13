@@ -192,7 +192,7 @@ export const AddShiftView: React.FC = () => {
   };
 
   return (
-    <div className="w-full flex flex-col gap-4 pb-28 md:pb-12 max-w-4xl mx-auto px-4 md:px-6 pt-2">
+    <div className="w-full flex flex-col gap-3 sm:gap-4 pb-24 sm:pb-28 md:pb-12 max-w-4xl mx-auto px-2.5 sm:px-4 md:px-6 pt-1 sm:pt-2">
       {/* Top Segmented Switcher */}
       <div className="bg-[#eaedff] p-1 rounded-2xl flex items-center justify-between">
         <button
@@ -294,21 +294,21 @@ export const AddShiftView: React.FC = () => {
       </div>
 
       {/* Date Navigation Card */}
-      <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between">
+      <div className="bg-white p-2.5 sm:p-3.5 rounded-2xl shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between gap-1.5">
         <button
           onClick={() => handleShiftDate(-1)}
-          className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] flex items-center justify-center text-[#131b2e] active:scale-90 transition-transform"
+          className="w-8 h-8 rounded-full bg-[#f2f3ff] hover:bg-[#eaedff] flex items-center justify-center text-[#131b2e] active:scale-90 transition-transform shrink-0"
           type="button"
         >
           <span className="material-symbols-outlined text-[18px]">chevron_left</span>
         </button>
 
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-[#004ac6] text-[20px]">calendar_today</span>
-          <div className="text-center">
-            <div className="text-base font-bold text-[#131b2e]">{dateFormatted}</div>
-            <div className="text-[11px] text-[#006c49] font-bold">
-              {existingShiftOnDate ? '기존 근무 등록됨 (수정 가능)' : '오늘 스케줄'}
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="material-symbols-outlined text-[#004ac6] text-[18px] sm:text-[20px] shrink-0">calendar_today</span>
+          <div className="text-center min-w-0">
+            <div className="text-sm sm:text-base font-bold text-[#131b2e] tabular-nums truncate">{dateFormatted}</div>
+            <div className="text-[10px] sm:text-[11px] text-[#006c49] font-bold truncate">
+              {existingShiftOnDate ? '기존 근무 등록됨 (수정 가능)' : '선택된 날짜'}
             </div>
           </div>
         </div>
@@ -440,30 +440,30 @@ export const AddShiftView: React.FC = () => {
             </div>
 
             {/* Time Inputs */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="bg-[#f2f3ff] p-3 rounded-xl">
+            <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-2 sm:gap-2.5">
+              <div className="bg-[#f2f3ff] p-2.5 sm:p-3 rounded-xl min-w-0">
                 <span className="text-[11px] font-medium text-[#434655]">출근 시각</span>
-                <div className="flex items-center justify-between mt-1">
+                <div className="flex items-center justify-between gap-1 mt-1">
                   <input
                     type="time"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
-                    className="text-lg font-bold bg-transparent text-[#131b2e] w-full focus:outline-none"
+                    className="text-base sm:text-lg font-bold bg-transparent text-[#131b2e] w-full min-w-0 focus:outline-none tabular-nums"
                   />
-                  <span className="material-symbols-outlined text-[#737686] text-[20px]">schedule</span>
+                  <span className="hidden min-[380px]:inline material-symbols-outlined text-[#737686] text-[18px] shrink-0">schedule</span>
                 </div>
               </div>
 
-              <div className="bg-[#f2f3ff] p-3 rounded-xl">
+              <div className="bg-[#f2f3ff] p-2.5 sm:p-3 rounded-xl min-w-0">
                 <span className="text-[11px] font-medium text-[#434655]">퇴근 시각</span>
-                <div className="flex items-center justify-between mt-1">
+                <div className="flex items-center justify-between gap-1 mt-1">
                   <input
                     type="time"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
-                    className="text-lg font-bold bg-transparent text-[#131b2e] w-full focus:outline-none"
+                    className="text-base sm:text-lg font-bold bg-transparent text-[#131b2e] w-full min-w-0 focus:outline-none tabular-nums"
                   />
-                  <span className="material-symbols-outlined text-[#737686] text-[20px]">schedule</span>
+                  <span className="hidden min-[380px]:inline material-symbols-outlined text-[#737686] text-[18px] shrink-0">schedule</span>
                 </div>
               </div>
             </div>
@@ -790,7 +790,7 @@ export const AddShiftView: React.FC = () => {
             </div>
 
             {/* Paid / Hours Configuration */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-2">
               <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-[#c3c6d7]/20">
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-[#131b2e]">유급 적용</span>
@@ -798,7 +798,7 @@ export const AddShiftView: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setIsPaidLeave(!isPaidLeave)}
-                  className={`w-10 h-6 rounded-full relative p-0.5 transition-colors cursor-pointer ${
+                  className={`w-10 h-6 rounded-full relative p-0.5 transition-colors cursor-pointer shrink-0 ${
                     isPaidLeave ? 'bg-[#004ac6]' : 'bg-[#e2e7ff]'
                   }`}
                   type="button"
@@ -814,19 +814,19 @@ export const AddShiftView: React.FC = () => {
               <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-[#c3c6d7]/20">
                 <div className="flex flex-col">
                   <span className="text-[10px] text-[#434655]">인정 시간</span>
-                  <span className="text-sm font-bold text-[#131b2e]">{recognizedHours}시간</span>
+                  <span className="text-sm font-bold text-[#131b2e] tabular-nums">{recognizedHours}시간</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => setRecognizedHours((prev) => Math.max(0, prev - 1))}
-                    className="w-6 h-6 rounded bg-[#f2f3ff] flex items-center justify-center font-bold text-xs"
+                    className="w-7 h-7 rounded bg-[#f2f3ff] flex items-center justify-center font-bold text-xs"
                     type="button"
                   >
                     -
                   </button>
                   <button
                     onClick={() => setRecognizedHours((prev) => prev + 1)}
-                    className="w-6 h-6 rounded bg-[#f2f3ff] flex items-center justify-center font-bold text-xs"
+                    className="w-7 h-7 rounded bg-[#f2f3ff] flex items-center justify-center font-bold text-xs"
                     type="button"
                   >
                     +
@@ -850,11 +850,11 @@ export const AddShiftView: React.FC = () => {
       )}
 
       {/* Floating Sticky Action Trigger Wrapper */}
-      <div className="pt-2 sticky bottom-18 md:bottom-4 z-20">
+      <div className="pt-1 sm:pt-2 sticky bottom-17 sm:bottom-18 md:bottom-4 z-20">
         <button
           onClick={handleSubmit}
           disabled={isSubmitting}
-          className="w-full h-14 bg-[#004ac6] text-white rounded-2xl font-bold text-base flex items-center justify-center gap-2 shadow-lg active:scale-[0.985] active:bg-[#003ea8] transition-all cursor-pointer"
+          className="w-full h-12 sm:h-14 px-3 bg-[#004ac6] text-white rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-1.5 sm:gap-2 shadow-lg active:scale-[0.985] active:bg-[#003ea8] transition-all cursor-pointer tabular-nums"
           type="button"
         >
           {isSubmitting ? (
@@ -862,10 +862,10 @@ export const AddShiftView: React.FC = () => {
           ) : (
             <span className="material-symbols-outlined text-[20px]">check_circle</span>
           )}
-          <span>
+          <span className="truncate">
             {formatKRW(estimatedPay)}원 {activeTabMode === 'work' ? '근무 등록 완료' : '휴무 등록 완료'}
           </span>
-          <span className="text-xs opacity-80">(1초 즉시 저장)</span>
+          <span className="hidden min-[390px]:inline text-xs opacity-80 shrink-0">(1초 저장)</span>
         </button>
       </div>
     </div>

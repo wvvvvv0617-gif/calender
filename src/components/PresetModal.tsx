@@ -275,7 +275,7 @@ export const PresetModal: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-7 gap-1.5 pt-1">
+            <div className="grid grid-cols-4 min-[360px]:grid-cols-7 gap-1.5 pt-1">
               {COLOR_THEME_KEYS.map((key) => {
                 const pal = PRESET_COLOR_PALETTES[key];
                 const isSelected = colorTheme === key;
@@ -328,7 +328,7 @@ export const PresetModal: React.FC = () => {
           {/* Badge Type Selector */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-[#131b2e]">근무 배지 유형</label>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
               {[
                 { type: '오픈' as const, icon: 'wb_sunny' },
                 { type: '미들' as const, icon: 'routine' },
@@ -377,7 +377,7 @@ export const PresetModal: React.FC = () => {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 min-[340px]:grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold text-[#434655]">출근 시간</span>
                   <input

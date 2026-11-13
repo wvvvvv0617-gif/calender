@@ -3,7 +3,7 @@
  * Updated with Notification Read State, Modal Modes, Period Clear, and Terms Modal
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import {
   Workplace,
   Preset,
@@ -35,11 +35,14 @@ import {
   googleSignIn,
   logout as googleLogout,
   getAccessToken,
+  clearAccessToken,
+  hasValidAccessToken,
   initAuth,
   findDriveBackupFile,
   readDriveBackupFile,
   saveToGoogleDrive,
   DriveFileInfo,
+  DriveApiError,
 } from '../utils/googleDriveSync';
 import type { User } from 'firebase/auth';
 import type { DriveConfirmDialogProps } from '../components/DriveConfirmDialog';
@@ -166,17 +169,27 @@ interface ShiftContextType {
   // Google Drive Cloud Backup & Sync
   googleUser: User | null;
   isGoogleDriveConnected: boolean;
+  hasActiveDriveToken: boolean;
   isDriveSyncing: boolean;
   lastDriveSyncTime: string | null;
   driveFileInfo: DriveFileInfo | null;
-  connectGoogleDrive: () => Promise<void>;
+  connectGoogleDrive: (forceAccountSelect?: boolean) => Promise<void>;
   disconnectGoogleDrive: () => Promise<void>;
-  refreshDriveStatus: () => Promise<void>;
+  refreshDriveStatus: (options?: { interactive?: boolean }) => Promise<void>;
   saveToDriveWithConfirm: () => void;
   restoreFromDriveWithConfirm: () => void;
   executeSaveToDrive: () => Promise<boolean>;
   executeRestoreFromDrive: () => Promise<boolean>;
   driveConfirmDialogProps: DriveConfirmDialogProps;
+  authDomainError: { domain: string; projectId: string } | null;
+  clearAuthDomainError: () => void;
+  hasUsedDriveBefore: boolean;
+  hasPendingDriveBackup: boolean;
+  pendingBackupSummary: string | null;
+  isReconnectBannerDismissed: boolean;
+  dismissReconnectBanner: () => void;
+  promptDriveBackup: (changeSummary: string, options?: { skipModal?: boolean }) => void;
+  reconnectAndSyncDrive: () => Promise<void>;
 }
 
 const ShiftContext = createContext<ShiftContextType | undefined>(undefined);
@@ -194,6 +207,9 @@ const STORAGE_KEYS = {
   READ_NOTIFS: 'shiftmate_read_notifications_v2',
   WEEK_STARTS_ON: 'shiftmate_week_starts_on_v2',
   LAST_DRIVE_SYNC: 'shiftmate_last_drive_sync_v2',
+  DRIVE_CONNECTED_EVER: 'shiftmate_drive_ever_connected_v1',
+  DRIVE_PENDING_BACKUP: 'shiftmate_drive_pending_backup_v1',
+  DRIVE_PENDING_SUMMARY: 'shiftmate_drive_pending_summary_v1',
 };
 
 export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -621,17 +637,26 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Workplace actions
   const updateWorkplace = (updated: Partial<Workplace>) => {
-    setWorkplaces((prev) =>
-      prev.map((w) => (w.id === activeWorkplaceId ? { ...w, ...updated } : w))
-    );
+    setWorkplaces((prev) => {
+      const next = prev.map((w) => (w.id === activeWorkplaceId ? { ...w, ...updated } : w));
+      latestAppDataRef.current.workplaces = next;
+      return next;
+    });
+    promptDriveBackup('사업장·시급 정보 수정');
   };
 
   const addNewWorkplace = (wp: Omit<Workplace, 'id'>) => {
     const newId = `wp_${Date.now()}`;
     const newWp: Workplace = { ...wp, id: newId };
-    setWorkplaces((prev) => [...prev, newWp]);
+    setWorkplaces((prev) => {
+      const next = [...prev, newWp];
+      latestAppDataRef.current.workplaces = next;
+      return next;
+    });
     setActiveWorkplaceId(newId);
+    latestAppDataRef.current.activeWorkplaceId = newId;
     showToast(`새 근무처 '${newWp.name}'이(가) 등록되었습니다.`);
+    promptDriveBackup(`새 근무처 '${newWp.name}' 추가`);
   };
 
   const deleteWorkplace = (id: string): boolean => {
@@ -644,16 +669,23 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     const remaining = workplaces.filter((w) => w.id !== id);
     setWorkplaces(remaining);
+    latestAppDataRef.current.workplaces = remaining;
 
     // If currently selected workplace was deleted, switch active to the first remaining one
     if (activeWorkplaceId === id) {
       setActiveWorkplaceId(remaining[0].id);
+      latestAppDataRef.current.activeWorkplaceId = remaining[0].id;
     }
 
     // Clean up shifts tied to this deleted workplace
-    setShifts((prev) => prev.filter((s) => s.workplaceId !== id));
+    setShifts((prev) => {
+      const next = prev.filter((s) => s.workplaceId !== id);
+      latestAppDataRef.current.shifts = next;
+      return next;
+    });
 
     showToast(`'${targetName}' 근무처가 삭제되었습니다.`);
+    promptDriveBackup(`근무처 '${targetName}' 삭제`);
     return true;
   };
 
@@ -661,18 +693,33 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const addPreset = (preset: Omit<Preset, 'id'>) => {
     const newId = `preset_${Date.now()}`;
     const newPreset: Preset = { ...preset, id: newId };
-    setPresets((prev) => [...prev, newPreset]);
+    setPresets((prev) => {
+      const next = [...prev, newPreset];
+      latestAppDataRef.current.presets = next;
+      return next;
+    });
     showToast(`'${newPreset.name}' 프리셋이 추가되었습니다.`);
+    promptDriveBackup(`'${newPreset.name}' 프리셋 추가`);
   };
 
   const updatePreset = (id: string, updated: Partial<Preset>) => {
-    setPresets((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+    setPresets((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...updated } : p));
+      latestAppDataRef.current.presets = next;
+      return next;
+    });
     showToast('프리셋 정보가 수정되었습니다.');
+    promptDriveBackup('프리셋 설정 수정');
   };
 
   const deletePreset = (id: string) => {
-    setPresets((prev) => prev.filter((p) => p.id !== id));
+    setPresets((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      latestAppDataRef.current.presets = next;
+      return next;
+    });
     showToast('프리셋이 삭제되었습니다.');
+    promptDriveBackup('프리셋 삭제');
   };
 
   // Shift actions
@@ -683,6 +730,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Overwrite if shift exists on the same date
       const filtered = prev.filter((s) => s.date !== newShift.date);
       const updated = [...filtered, newShift];
+      latestAppDataRef.current.shifts = updated;
       try {
         localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(updated));
       } catch (e) {
@@ -692,11 +740,14 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
     setSelectedDate(newShift.date);
     showToast(`${newShift.date} 근무가 등록되었습니다.`);
+    const label = newShift.type === 'leave' ? `${newShift.date.slice(5)} ${newShift.name} 휴무 등록` : `${newShift.date.slice(5)} ${newShift.name} 근무 등록`;
+    promptDriveBackup(label);
   };
 
   const updateShift = (id: string, updated: Partial<ShiftRecord>) => {
     setShifts((prev) => {
       const updatedList = prev.map((s) => (s.id === id ? { ...s, ...updated } : s));
+      latestAppDataRef.current.shifts = updatedList;
       try {
         localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(updatedList));
       } catch (e) {
@@ -705,11 +756,13 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return updatedList;
     });
     showToast('근무 기록이 업데이트되었습니다.');
+    promptDriveBackup('근무 기록 수정');
   };
 
   const deleteShift = (id: string) => {
     setShifts((prev) => {
       const updated = prev.filter((s) => s.id !== id);
+      latestAppDataRef.current.shifts = updated;
       try {
         localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(updated));
       } catch (e) {
@@ -718,11 +771,14 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return updated;
     });
     showToast('근무 기록이 삭제되었습니다.');
+    promptDriveBackup('근무 기록 삭제');
   };
 
   const deleteShiftByDate = (date: string) => {
+    const hadShift = latestAppDataRef.current.shifts.some((s) => s.date === date);
     setShifts((prev) => {
       const updated = prev.filter((s) => s.date !== date);
+      latestAppDataRef.current.shifts = updated;
       try {
         localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(updated));
       } catch (e) {
@@ -730,6 +786,9 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
       return updated;
     });
+    if (hadShift) {
+      promptDriveBackup(`${date.slice(5)} 일정 삭제`, { skipModal: isQuickStampActive });
+    }
   };
 
   const removeShiftFromDate = (date: string) => {
@@ -744,6 +803,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const updated = exists
         ? prev.map((r) => (r.year === rate.year ? rate : r))
         : [rate, ...prev].sort((a, b) => b.year - a.year);
+      latestAppDataRef.current.minimumWages = updated;
       try {
         localStorage.setItem(STORAGE_KEYS.MIN_WAGES, JSON.stringify(updated));
       } catch (e) {
@@ -752,6 +812,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return updated;
     });
     showToast(`${rate.year}년 최저시급(${rate.wage.toLocaleString()}원)이 추가되었습니다.`);
+    promptDriveBackup(`${rate.year}년 최저시급 기준 업데이트`);
   };
 
   // Stamp preset on specific date
@@ -790,6 +851,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setShifts((prev) => {
       const filtered = prev.filter((s) => s.date !== date);
       const updated = [...filtered, newRecord];
+      latestAppDataRef.current.shifts = updated;
       try {
         localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(updated));
       } catch (e) {
@@ -799,6 +861,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
     setSelectedDate(date);
     showToast(`${date.slice(5)} ${preset.name} 스탬프 적용 완료!`);
+    promptDriveBackup(`${date.slice(5)} ${preset.name} 적용`, { skipModal: isQuickStampActive });
   };
 
   // Modal actions
@@ -902,12 +965,23 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     );
   }, [shifts, currentMonth, taxOption, holidayPayOption, activeWorkplace.hourlyWage]);
 
-  // Export complete app data as backup JSON file
-  const getAppDataJsonString = (): string => {
-    const dataToExport = {
-      app: 'ShiftMate',
-      version: '2.0',
-      exportedAt: new Date().toISOString(),
+  // Synchronous reference to avoid stale closures right after editing shifts/settings
+  const latestAppDataRef = useRef({
+    userName,
+    profileImage,
+    workplaces,
+    activeWorkplaceId,
+    presets,
+    shifts,
+    minimumWages,
+    taxOption,
+    holidayPayOption,
+    paydayOption,
+    weekStartsOn,
+  });
+
+  useEffect(() => {
+    latestAppDataRef.current = {
       userName,
       profileImage,
       workplaces,
@@ -919,6 +993,39 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       holidayPayOption,
       paydayOption,
       weekStartsOn,
+    };
+  }, [
+    userName,
+    profileImage,
+    workplaces,
+    activeWorkplaceId,
+    presets,
+    shifts,
+    minimumWages,
+    taxOption,
+    holidayPayOption,
+    paydayOption,
+    weekStartsOn,
+  ]);
+
+  // Export complete app data as backup JSON file (reads synchronous latestAppDataRef)
+  const getAppDataJsonString = (): string => {
+    const snap = latestAppDataRef.current;
+    const dataToExport = {
+      app: 'ShiftMate',
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      userName: snap.userName,
+      profileImage: snap.profileImage,
+      workplaces: snap.workplaces,
+      activeWorkplaceId: snap.activeWorkplaceId,
+      presets: snap.presets,
+      shifts: snap.shifts,
+      minimumWages: snap.minimumWages,
+      taxOption: snap.taxOption,
+      holidayPayOption: snap.holidayPayOption,
+      paydayOption: snap.paydayOption,
+      weekStartsOn: snap.weekStartsOn,
     };
     return JSON.stringify(dataToExport, null, 2);
   };
@@ -995,6 +1102,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Google Drive Cloud Backup & Sync State
   const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [hasActiveDriveToken, setHasActiveDriveToken] = useState<boolean>(() => hasValidAccessToken());
   const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
   const [lastDriveSyncTime, setLastDriveSyncTime] = useState<string | null>(() => {
     try {
@@ -1003,7 +1111,74 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return null;
     }
   });
+  const [hasUsedDriveBefore, setHasUsedDriveBefore] = useState<boolean>(() => {
+    try {
+      return (
+        localStorage.getItem(STORAGE_KEYS.DRIVE_CONNECTED_EVER) === 'true' ||
+        !!localStorage.getItem(STORAGE_KEYS.LAST_DRIVE_SYNC)
+      );
+    } catch {
+      return false;
+    }
+  });
+  const [hasPendingDriveBackup, setHasPendingDriveBackup] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.DRIVE_PENDING_BACKUP) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [pendingBackupSummary, setPendingBackupSummary] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.DRIVE_PENDING_SUMMARY);
+    } catch {
+      return null;
+    }
+  });
+  const [skipBackupPromptThisSession, setSkipBackupPromptThisSession] = useState<boolean>(false);
+  const [isReconnectBannerDismissed, setIsReconnectBannerDismissed] = useState<boolean>(false);
   const [driveFileInfo, setDriveFileInfo] = useState<DriveFileInfo | null>(null);
+  const [authDomainError, setAuthDomainError] = useState<{ domain: string; projectId: string } | null>(null);
+
+  const clearAuthDomainError = () => {
+    setAuthDomainError(null);
+  };
+
+  const dismissReconnectBanner = () => {
+    setIsReconnectBannerDismissed(true);
+  };
+
+  const markDriveUsed = () => {
+    setHasUsedDriveBefore(true);
+    try {
+      localStorage.setItem(STORAGE_KEYS.DRIVE_CONNECTED_EVER, 'true');
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const markPendingDriveBackup = (pending: boolean, summary?: string | null) => {
+    setHasPendingDriveBackup(pending);
+    if (pending) {
+      const nextSummary = summary || '최근 변경사항 있음';
+      setPendingBackupSummary(nextSummary);
+      setIsReconnectBannerDismissed(false);
+      try {
+        localStorage.setItem(STORAGE_KEYS.DRIVE_PENDING_BACKUP, 'true');
+        localStorage.setItem(STORAGE_KEYS.DRIVE_PENDING_SUMMARY, nextSummary);
+      } catch {
+        // ignore storage errors
+      }
+    } else {
+      setPendingBackupSummary(null);
+      try {
+        localStorage.removeItem(STORAGE_KEYS.DRIVE_PENDING_BACKUP);
+        localStorage.removeItem(STORAGE_KEYS.DRIVE_PENDING_SUMMARY);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  };
 
   // Drive Confirmation Dialog State (Mandatory for destructive/overwrite operations)
   const [driveConfirmState, setDriveConfirmState] = useState<{
@@ -1011,33 +1186,87 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     type: 'save' | 'restore';
     title: string;
     description: string;
+    changeSummary?: string | null;
+    isAutoPrompt?: boolean;
   }>({
     isOpen: false,
     type: 'save',
     title: '',
     description: '',
+    changeSummary: null,
+    isAutoPrompt: false,
   });
 
   const isGoogleDriveConnected = !!googleUser;
+
+  const promptDriveBackup = (changeSummary: string, options?: { skipModal?: boolean }) => {
+    markPendingDriveBackup(true, changeSummary);
+
+    // Only auto-open the 1-tap backup dialog when the user has linked Google Drive or used it before
+    if (!isGoogleDriveConnected && !hasUsedDriveBefore) {
+      return;
+    }
+
+    if (options?.skipModal || skipBackupPromptThisSession) {
+      return;
+    }
+
+    setDriveConfirmState({
+      isOpen: true,
+      type: 'save',
+      title: '변경된 근무 기록을 구글 드라이브에 백업할까요?',
+      description:
+        '확인 버튼 한 번만 누르면 내 구글 드라이브(ShiftMate_Backup_Data.json)에 방금 수정한 내용이 즉시 안전하게 저장됩니다.',
+      changeSummary,
+      isAutoPrompt: true,
+    });
+  };
 
   // Initialize Auth state listener
   useEffect(() => {
     const unsubscribe = initAuth(
       (user, token) => {
         setGoogleUser(user);
-        findDriveBackupFile(token)
-          .then((info) => {
-            setDriveFileInfo(info);
-            if (info?.modifiedTime) {
-              const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
-              setLastDriveSyncTime(timeStr);
-            }
-          })
-          .catch((err) => console.warn('Drive check on load:', err));
+        setHasActiveDriveToken(!!token);
+        markDriveUsed();
+        if (token) {
+          findDriveBackupFile(token)
+            .then((info) => {
+              setDriveFileInfo(info);
+              if (info?.modifiedTime) {
+                const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
+                setLastDriveSyncTime(timeStr);
+                try {
+                  localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+                } catch {
+                  // ignore storage errors
+                }
+              }
+            })
+            .catch((err: any) => {
+              if (err instanceof DriveApiError && err.status === 401) {
+                clearAccessToken();
+                setHasActiveDriveToken(false);
+              }
+              console.warn('Drive check on load:', err);
+            });
+        }
       },
       () => {
         setGoogleUser(null);
+        setHasActiveDriveToken(false);
         setDriveFileInfo(null);
+      },
+      (redirectErr: any) => {
+        const errCode = redirectErr?.code || '';
+        const errMsg = redirectErr?.message || '';
+        if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain')) {
+          const domain = typeof window !== 'undefined' ? window.location.hostname : 'wvvvvv0617-gif.github.io';
+          setAuthDomainError({
+            domain: domain || 'wvvvvv0617-gif.github.io',
+            projectId: 'gen-lang-client-0536595463',
+          });
+        }
       }
     );
     return () => {
@@ -1045,36 +1274,89 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   }, []);
 
-  const refreshDriveStatus = async () => {
-    const token = await getAccessToken();
-    if (!token) return;
+  const isUnauthorizedDriveError = (err: any): boolean => {
+    return (err instanceof DriveApiError && err.status === 401) || err?.status === 401;
+  };
+
+  const obtainInteractiveToken = async (loginHint?: string | null): Promise<string | null> => {
+    const signInRes = await googleSignIn({ loginHint: loginHint ?? googleUser?.email });
+    if (!signInRes?.accessToken) {
+      return null;
+    }
+    setAuthDomainError(null);
+    setGoogleUser(signInRes.user);
+    setHasActiveDriveToken(true);
+    markDriveUsed();
+    return signInRes.accessToken;
+  };
+
+  const refreshDriveStatus = async (options?: { interactive?: boolean }) => {
     try {
       setIsDriveSyncing(true);
-      const info = await findDriveBackupFile(token);
-      setDriveFileInfo(info);
-      if (info?.modifiedTime) {
-        const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
-        setLastDriveSyncTime(timeStr);
-        try {
-          localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
-        } catch (e) {
-          console.error(e);
+      let token = await getAccessToken();
+      if (!token) {
+        if (!options?.interactive) {
+          setHasActiveDriveToken(false);
+          return;
         }
+        token = await obtainInteractiveToken(googleUser?.email);
+        if (!token) return;
+      }
+
+      const fetchAndApplyInfo = async (activeToken: string) => {
+        const info = await findDriveBackupFile(activeToken);
+        setDriveFileInfo(info);
+        if (info?.modifiedTime) {
+          const timeStr = new Date(info.modifiedTime).toLocaleString('ko-KR');
+          setLastDriveSyncTime(timeStr);
+          try {
+            localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      };
+
+      try {
+        await fetchAndApplyInfo(token);
+      } catch (err: any) {
+        if (isUnauthorizedDriveError(err)) {
+          clearAccessToken();
+          setHasActiveDriveToken(false);
+          if (options?.interactive) {
+            const freshToken = await obtainInteractiveToken(googleUser?.email);
+            if (freshToken) {
+              await fetchAndApplyInfo(freshToken);
+              return;
+            }
+          }
+          return;
+        }
+        throw err;
       }
     } catch (err: any) {
       console.error(err);
-      showToast('⚠️ 드라이브 파일 상태 확인 실패: ' + (err.message || ''));
+      const errCode = err?.code || '';
+      if (errCode !== 'auth/popup-closed-by-user') {
+        showToast('⚠️ 드라이브 파일 상태 확인 실패: ' + (err.message || ''));
+      }
     } finally {
       setIsDriveSyncing(false);
     }
   };
 
-  const connectGoogleDrive = async () => {
+  const connectGoogleDrive = async (forceAccountSelect = false) => {
     try {
       setIsDriveSyncing(true);
-      const result = await googleSignIn();
+      const result = await googleSignIn({
+        forceAccountSelect,
+        loginHint: forceAccountSelect ? null : googleUser?.email,
+      });
       if (result) {
+        setAuthDomainError(null);
         setGoogleUser(result.user);
+        setHasActiveDriveToken(true);
+        markDriveUsed();
         showToast(`🎉 ${result.user.displayName || result.user.email || '구글'} 계정으로 구글 드라이브가 연결되었습니다!`);
         try {
           const info = await findDriveBackupFile(result.accessToken);
@@ -1094,7 +1376,90 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     } catch (err: any) {
       console.error('Google Drive connect error:', err);
-      showToast('⚠️ 구글 드라이브 연결 실패: ' + (err.message || '인증이 취소되었거나 오류가 발생했습니다.'));
+      const errCode = err?.code || '';
+      const errMsg = err?.message || '';
+      if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain')) {
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'wvvvvv0617-gif.github.io';
+        setAuthDomainError({
+          domain: domain || 'wvvvvv0617-gif.github.io',
+          projectId: 'gen-lang-client-0536595463',
+        });
+        showToast('⚠️ 도메인 승인이 필요합니다. 아래 안내에 따라 Firebase에 등록해주세요.');
+      } else if (errCode === 'auth/popup-closed-by-user') {
+        showToast('구글 로그인 창이 닫혔습니다.');
+      } else {
+        showToast('⚠️ 구글 드라이브 연결 실패: ' + (errMsg || '인증이 취소되었거나 오류가 발생했습니다.'));
+      }
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
+
+  const reconnectAndSyncDrive = async () => {
+    try {
+      setIsDriveSyncing(true);
+      const result = await googleSignIn({ loginHint: googleUser?.email });
+      if (result) {
+        setAuthDomainError(null);
+        setGoogleUser(result.user);
+        setHasActiveDriveToken(true);
+        markDriveUsed();
+        let foundInfo: DriveFileInfo | null = null;
+        try {
+          foundInfo = await findDriveBackupFile(result.accessToken);
+          setDriveFileInfo(foundInfo);
+          if (foundInfo?.modifiedTime) {
+            const timeStr = new Date(foundInfo.modifiedTime).toLocaleString('ko-KR');
+            setLastDriveSyncTime(timeStr);
+            try {
+              localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        } catch (e) {
+          console.warn('Drive file search error:', e);
+        }
+
+        if (hasPendingDriveBackup) {
+          setDriveConfirmState({
+            isOpen: true,
+            type: 'save',
+            title: '미백업 변경사항을 구글 드라이브에 저장할까요?',
+            description: '방금 드라이브 연결이 완료되었습니다. 대기 중인 변경사항을 지금 바로 백업 파일에 반영합니다.',
+            changeSummary: pendingBackupSummary || '대기 중인 근무/설정 변경사항',
+            isAutoPrompt: true,
+          });
+        } else if (latestAppDataRef.current.shifts.length === 0 && foundInfo) {
+          setDriveConfirmState({
+            isOpen: true,
+            type: 'restore',
+            title: '구글 드라이브 백업 데이터를 복원할까요?',
+            description: '현재 기기에 근무 기록이 비어 있습니다. 구글 드라이브에 보관된 백업 파일을 불러와 복원할 수 있습니다.',
+            changeSummary: null,
+            isAutoPrompt: false,
+          });
+        } else {
+          showToast(`☁️ ${result.user.displayName || result.user.email || '구글'} 드라이브 세션이 다시 연결되었습니다.`);
+        }
+      }
+    } catch (err: any) {
+      console.error('Google Drive reconnect error:', err);
+      const errCode = err?.code || '';
+      const errMsg = err?.message || '';
+      if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain')) {
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'wvvvvv0617-gif.github.io';
+        setAuthDomainError({
+          domain: domain || 'wvvvvv0617-gif.github.io',
+          projectId: 'gen-lang-client-0536595463',
+        });
+        openDataSafetyModal();
+        showToast('⚠️ 도메인 승인이 필요합니다. 안내된 도메인을 등록해주세요.');
+      } else if (errCode === 'auth/popup-closed-by-user') {
+        showToast('구글 로그인 창이 닫혔습니다.');
+      } else {
+        showToast('⚠️ 구글 드라이브 재연결 실패: ' + (errMsg || '오류가 발생했습니다.'));
+      }
     } finally {
       setIsDriveSyncing(false);
     }
@@ -1104,7 +1469,15 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       await googleLogout();
       setGoogleUser(null);
+      setHasActiveDriveToken(false);
       setDriveFileInfo(null);
+      setHasUsedDriveBefore(false);
+      markPendingDriveBackup(false);
+      try {
+        localStorage.removeItem(STORAGE_KEYS.DRIVE_CONNECTED_EVER);
+      } catch {
+        // ignore
+      }
       showToast('구글 계정 연결이 해제되었습니다.');
     } catch (err: any) {
       console.error('Logout error:', err);
@@ -1112,61 +1485,130 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const executeSaveToDrive = async (): Promise<boolean> => {
-    const token = await getAccessToken();
-    if (!token) {
-      showToast('⚠️ 구글 계정 인증이 만료되었습니다. 다시 로그인해주세요.');
-      await connectGoogleDrive();
-      return false;
-    }
     try {
       setIsDriveSyncing(true);
-      const jsonContent = getAppDataJsonString();
-      const res = await saveToGoogleDrive(token, jsonContent);
-      const timeStr = new Date(res.modifiedTime).toLocaleString('ko-KR');
-      setLastDriveSyncTime(timeStr);
-      try {
-        localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
-      } catch (e) {
-        console.error(e);
+      let token = await getAccessToken();
+
+      // Acquire in-memory OAuth token using saved login_hint (skips account picker when possible)
+      if (!token) {
+        token = await obtainInteractiveToken(googleUser?.email);
+        if (!token) {
+          return false;
+        }
       }
-      const info = await findDriveBackupFile(token);
-      setDriveFileInfo(info);
-      showToast('☁️ 구글 드라이브에 모든 근무 기록이 안전하게 저장되었습니다!');
+
+      const jsonContent = getAppDataJsonString();
+      const performSave = async (activeToken: string) => {
+        const res = await saveToGoogleDrive(activeToken, jsonContent);
+        const timeStr = new Date(res.modifiedTime).toLocaleString('ko-KR');
+        setLastDriveSyncTime(timeStr);
+        markUsedAndSynced(timeStr);
+        const info = await findDriveBackupFile(activeToken);
+        setDriveFileInfo(info);
+        markPendingDriveBackup(false);
+      };
+
+      try {
+        await performSave(token);
+      } catch (saveErr: any) {
+        if (isUnauthorizedDriveError(saveErr)) {
+          clearAccessToken();
+          setHasActiveDriveToken(false);
+          const refreshedToken = await obtainInteractiveToken(googleUser?.email);
+          if (!refreshedToken) {
+            return false;
+          }
+          await performSave(refreshedToken);
+        } else {
+          throw saveErr;
+        }
+      }
+
+      showToast('☁️ 구글 드라이브에 최신 근무 기록이 안전하게 백업되었습니다!');
       return true;
     } catch (err: any) {
       console.error('Drive save error:', err);
-      showToast('⚠️ 드라이브 저장 실패: ' + (err.message || ''));
+      const errCode = err?.code || '';
+      const errMsg = err?.message || '';
+      if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain')) {
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'wvvvvv0617-gif.github.io';
+        setAuthDomainError({
+          domain: domain || 'wvvvvv0617-gif.github.io',
+          projectId: 'gen-lang-client-0536595463',
+        });
+        openDataSafetyModal();
+        showToast('⚠️ 도메인 승인이 필요합니다.');
+      } else if (errCode === 'auth/popup-closed-by-user') {
+        showToast('구글 로그인 창이 닫혀 백업이 보류되었습니다.');
+      } else {
+        showToast('⚠️ 드라이브 저장 실패: ' + (errMsg || ''));
+      }
       return false;
     } finally {
       setIsDriveSyncing(false);
     }
   };
 
-  const executeRestoreFromDrive = async (): Promise<boolean> => {
-    const token = await getAccessToken();
-    if (!token) {
-      showToast('⚠️ 구글 계정 인증이 만료되었습니다. 다시 로그인해주세요.');
-      await connectGoogleDrive();
-      return false;
+  const markUsedAndSynced = (timeStr: string) => {
+    markDriveUsed();
+    try {
+      localStorage.setItem(STORAGE_KEYS.LAST_DRIVE_SYNC, timeStr);
+    } catch (e) {
+      console.error(e);
     }
+  };
+
+  const executeRestoreFromDrive = async (): Promise<boolean> => {
     try {
       setIsDriveSyncing(true);
-      const file = await findDriveBackupFile(token);
-      if (!file) {
-        showToast('⚠️ 구글 드라이브에 저장된 ShiftMate 백업 파일이 없습니다.');
-        return false;
+      let token = await getAccessToken();
+      if (!token) {
+        token = await obtainInteractiveToken(googleUser?.email);
+        if (!token) {
+          return false;
+        }
       }
-      const content = await readDriveBackupFile(token, file.id);
-      const success = importAppData(content);
-      if (success) {
-        const timeStr = new Date(file.modifiedTime).toLocaleString('ko-KR');
-        setLastDriveSyncTime(timeStr);
-        setDriveFileInfo(file);
+
+      const performRestore = async (activeToken: string): Promise<boolean> => {
+        const file = await findDriveBackupFile(activeToken);
+        if (!file) {
+          showToast('⚠️ 구글 드라이브에 저장된 ShiftMate 백업 파일이 없습니다.');
+          return false;
+        }
+        const content = await readDriveBackupFile(activeToken, file.id);
+        const success = importAppData(content);
+        if (success) {
+          const timeStr = new Date(file.modifiedTime).toLocaleString('ko-KR');
+          setLastDriveSyncTime(timeStr);
+          markUsedAndSynced(timeStr);
+          setDriveFileInfo(file);
+          markPendingDriveBackup(false);
+        }
+        return success;
+      };
+
+      try {
+        return await performRestore(token);
+      } catch (restoreErr: any) {
+        if (isUnauthorizedDriveError(restoreErr)) {
+          clearAccessToken();
+          setHasActiveDriveToken(false);
+          const refreshedToken = await obtainInteractiveToken(googleUser?.email);
+          if (!refreshedToken) {
+            return false;
+          }
+          return await performRestore(refreshedToken);
+        }
+        throw restoreErr;
       }
-      return success;
     } catch (err: any) {
       console.error('Drive restore error:', err);
-      showToast('⚠️ 드라이브 복원 실패: ' + (err.message || ''));
+      const errCode = err?.code || '';
+      if (errCode === 'auth/popup-closed-by-user') {
+        showToast('구글 로그인 창이 닫혀 복원이 취소되었습니다.');
+      } else {
+        showToast('⚠️ 드라이브 복원 실패: ' + (err.message || ''));
+      }
       return false;
     } finally {
       setIsDriveSyncing(false);
@@ -1179,6 +1621,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       type: 'save',
       title: '구글 드라이브에 근무 데이터 저장',
       description: '내 개인 구글 드라이브의 ShiftMate_Backup_Data.json 파일에 현재 기기의 모든 근무 기록과 사업장 설정을 안전하게 보관합니다.',
+      changeSummary: hasPendingDriveBackup ? pendingBackupSummary : null,
+      isAutoPrompt: false,
     });
   };
 
@@ -1188,11 +1632,19 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       type: 'restore',
       title: '구글 드라이브에서 데이터 복원',
       description: '구글 드라이브에 저장되어 있는 백업 파일을 불러와 현재 기기의 근무 기록을 최신 상태로 복원합니다.',
+      changeSummary: null,
+      isAutoPrompt: false,
     });
   };
 
   const closeDriveConfirmDialog = () => {
     setDriveConfirmState((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleMuteSessionPrompt = () => {
+    setSkipBackupPromptThisSession(true);
+    closeDriveConfirmDialog();
+    showToast('이번 작업 동안 자동 백업 확인 창을 표시하지 않습니다. 상단에서 언제든 백업할 수 있습니다.');
   };
 
   const handleDriveConfirm = async () => {
@@ -1210,16 +1662,20 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     type: driveConfirmState.type,
     title: driveConfirmState.title,
     description: driveConfirmState.description,
+    changeSummary: driveConfirmState.changeSummary,
+    isAutoPrompt: driveConfirmState.isAutoPrompt,
+    needsSignIn: !isGoogleDriveConnected,
     details: {
       shiftsCount: shifts.length,
       workplacesCount: workplaces.length,
       presetsCount: presets.length,
       lastUpdated: driveFileInfo?.modifiedTime
         ? new Date(driveFileInfo.modifiedTime).toLocaleString('ko-KR')
-        : undefined,
+        : lastDriveSyncTime || undefined,
     },
     onConfirm: handleDriveConfirm,
     onCancel: closeDriveConfirmDialog,
+    onMuteSessionPrompt: handleMuteSessionPrompt,
     isLoading: isDriveSyncing,
   };
 
@@ -1312,6 +1768,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         closeDataSafetyModal,
         googleUser,
         isGoogleDriveConnected,
+        hasActiveDriveToken,
         isDriveSyncing,
         lastDriveSyncTime,
         driveFileInfo,
@@ -1323,6 +1780,15 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         executeSaveToDrive,
         executeRestoreFromDrive,
         driveConfirmDialogProps,
+        authDomainError,
+        clearAuthDomainError,
+        hasUsedDriveBefore,
+        hasPendingDriveBackup,
+        pendingBackupSummary,
+        isReconnectBannerDismissed,
+        dismissReconnectBanner,
+        promptDriveBackup,
+        reconnectAndSyncDrive,
       }}
     >
       {children}

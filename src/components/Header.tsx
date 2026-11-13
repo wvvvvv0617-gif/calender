@@ -115,6 +115,8 @@ export const Header: React.FC = () => {
     markAllNotificationsAsRead,
     openDataSafetyModal,
     isGoogleDriveConnected,
+    hasPendingDriveBackup,
+    hasUsedDriveBefore,
   } = useShift();
 
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
@@ -144,9 +146,9 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 w-full z-40 bg-[#faf8ff]/90 backdrop-blur-xl border-b border-[#c3c6d7]/30 shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
-      <div className="max-w-7xl mx-auto h-16 px-3 sm:px-4 md:px-6 flex items-center justify-between gap-2 md:gap-3">
+      <div className="max-w-7xl mx-auto h-14 sm:h-16 px-2 sm:px-4 md:px-6 flex items-center justify-between gap-1.5 sm:gap-2 md:gap-3">
         {/* Left: Brand Logo & Store Selector */}
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
           <div
             className="flex items-center gap-2 shrink-0 cursor-pointer"
             onClick={() => setActiveTab('calendar')}
@@ -154,7 +156,7 @@ export const Header: React.FC = () => {
           >
             <img
               alt="ShiftMate Logo"
-              className="h-7 sm:h-8 w-auto object-contain shrink-0 rounded-md"
+              className="h-6 sm:h-8 w-auto object-contain shrink-0 rounded-md"
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGVvfQ-ogoFmu1BuA6gi68GDcv7UVHkfsyGZacWfbct5NFV49E1Ra1Ba8MBd5X_8mE97rm3bvIu4xClF99ySyN_a1cO2lIvNqYSfZY6MElg37KN-XTIv9n4O945Y8_G0PwbYUEU-68EaUVcK0cFWfjOafTPE9xFOXAy7CZggPE8VAojTrrVaHgaift7PtATTk29lj_IJhaE9uQSeQB23RuRF_ugnJAdhLD5rMKd8o8Z2EY-FfC5phEBA"
             />
           </div>
@@ -163,10 +165,10 @@ export const Header: React.FC = () => {
           <div className="relative min-w-0">
             <button
               onClick={() => setIsStoreDropdownOpen(!isStoreDropdownOpen)}
-              className="flex items-center gap-1 min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-95 transition-all truncate text-left border border-[#c3c6d7]/20 cursor-pointer"
+              className="flex items-center gap-0.5 sm:gap-1 min-h-[38px] sm:min-h-[40px] px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-[#f2f3ff] hover:bg-[#eaedff] active:scale-95 transition-all truncate text-left border border-[#c3c6d7]/20 cursor-pointer"
               type="button"
             >
-              <span className="text-[14px] sm:text-[15px] font-semibold text-[#131b2e] truncate max-w-[190px] sm:max-w-[280px]">
+              <span className="text-[13px] sm:text-[15px] font-semibold text-[#131b2e] truncate max-w-[116px] min-[380px]:max-w-[155px] sm:max-w-[280px]">
                 {activeWorkplace.icon} {activeWorkplace.name}
               </span>
               <span className="material-symbols-outlined text-[#737686] text-[18px] shrink-0">
@@ -181,7 +183,7 @@ export const Header: React.FC = () => {
                   className="fixed inset-0 z-30"
                   onClick={() => setIsStoreDropdownOpen(false)}
                 />
-                <div className="absolute left-0 top-full mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-xl border border-[#c3c6d7]/30 p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute left-0 top-full mt-2 w-[min(17.5rem,calc(100vw-1rem))] sm:w-72 bg-white rounded-2xl shadow-xl border border-[#c3c6d7]/30 p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-2.5 py-1.5 text-[11px] font-bold text-[#737686] uppercase tracking-wider flex items-center justify-between border-b border-[#eaedff]">
                     <span>근무처 목록</span>
                     <span className="text-[10px] text-[#004ac6] font-semibold flex items-center gap-0.5">
@@ -282,17 +284,17 @@ export const Header: React.FC = () => {
         </nav>
 
         {/* Right: Download App, Notifications & Profile */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {/* PWA Install & Shortcut Button */}
           {isInstalled ? (
             <button
               onClick={openPwaModal}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#6cf8bb]/30 text-[#006c49] border border-[#006c49]/20 text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+              className="flex items-center justify-center gap-1 min-h-[36px] min-w-[36px] px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#6cf8bb]/30 text-[#006c49] border border-[#006c49]/20 text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
               type="button"
               title="ShiftMate PWA 앱으로 실행 중입니다 (클릭 시 바로가기 관리)"
             >
-              <span className="material-symbols-outlined text-[16px] text-[#006c49]">check_circle</span>
-              <span className="text-[11px] sm:text-xs">앱 실행 중</span>
+              <span className="material-symbols-outlined text-[17px] text-[#006c49]">check_circle</span>
+              <span className="hidden min-[420px]:inline text-[11px] sm:text-xs">앱 실행 중</span>
             </button>
           ) : (
             <button
@@ -303,12 +305,14 @@ export const Header: React.FC = () => {
                   openPwaModal();
                 }
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#004ac6] text-white hover:bg-[#003ea8] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+              className="flex items-center justify-center gap-1 min-h-[36px] min-w-[36px] px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#004ac6] text-white hover:bg-[#003ea8] text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
               type="button"
               title="스마트폰 홈화면에 앱 설치 및 사이트 바로 접속"
             >
-              <span className="material-symbols-outlined text-[16px]">install_mobile</span>
-              <span className="text-[11px] sm:text-xs">{isInstallable ? '앱 설치하기' : '홈화면 설치'}</span>
+              <span className="material-symbols-outlined text-[17px]">install_mobile</span>
+              <span className="hidden min-[420px]:inline text-[11px] sm:text-xs">
+                {isInstallable ? '앱 설치' : '홈화면'}
+              </span>
             </button>
           )}
 
@@ -316,18 +320,32 @@ export const Header: React.FC = () => {
           <button
             type="button"
             onClick={openDataSafetyModal}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer border ${
-              isGoogleDriveConnected
+            className={`flex items-center justify-center gap-1 min-h-[36px] min-w-[36px] px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer border ${
+              hasPendingDriveBackup && (isGoogleDriveConnected || hasUsedDriveBefore)
+                ? 'bg-[#fff3e0] hover:bg-[#ffe0b2] text-[#b35300] border-[#ffb74d]/70'
+                : isGoogleDriveConnected
                 ? 'bg-[#eff3ff] hover:bg-[#dbe1ff] text-[#004ac6] border-[#004ac6]/30'
                 : 'bg-[#6cf8bb]/25 hover:bg-[#6cf8bb]/40 text-[#006c49] border-[#006c49]/20'
             }`}
-            title="구글 드라이브 동기화 및 데이터 영구 보관"
+            title={
+              hasPendingDriveBackup
+                ? '미백업 변경사항 있음 · 구글 드라이브 백업 및 보관소 열기'
+                : '구글 드라이브 동기화 및 데이터 영구 보관'
+            }
           >
-            <span className="material-symbols-outlined text-[16px]">
-              {isGoogleDriveConnected ? 'cloud_done' : 'cloud_sync'}
+            <span className="material-symbols-outlined text-[17px]">
+              {hasPendingDriveBackup && (isGoogleDriveConnected || hasUsedDriveBefore)
+                ? 'cloud_upload'
+                : isGoogleDriveConnected
+                ? 'cloud_done'
+                : 'cloud_sync'}
             </span>
             <span className="hidden sm:inline">
-              {isGoogleDriveConnected ? '드라이브 연동됨' : '구글 드라이브'}
+              {hasPendingDriveBackup && (isGoogleDriveConnected || hasUsedDriveBefore)
+                ? '백업 대기'
+                : isGoogleDriveConnected
+                ? '드라이브 연동됨'
+                : '구글 드라이브'}
             </span>
           </button>
 
@@ -336,12 +354,12 @@ export const Header: React.FC = () => {
             <button
               aria-label="알림"
               onClick={handleOpenNotif}
-              className="relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-full text-[#131b2e] hover:bg-[#eaedff] active:scale-95 transition-all cursor-pointer"
+              className="relative w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-full text-[#131b2e] hover:bg-[#eaedff] active:scale-95 transition-all cursor-pointer"
               type="button"
             >
-              <span className="material-symbols-outlined text-[22px]">notifications</span>
+              <span className="material-symbols-outlined text-[21px] sm:text-[22px]">notifications</span>
               {hasUnread && (
-                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#ad0033] ring-2 ring-[#faf8ff] animate-pulse"></span>
+                <span className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 rounded-full bg-[#ad0033] ring-2 ring-[#faf8ff]"></span>
               )}
             </button>
 
@@ -349,7 +367,7 @@ export const Header: React.FC = () => {
             {isNotifOpen && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setIsNotifOpen(false)} />
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-[#c3c6d7]/30 p-3 z-40 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-[#c3c6d7]/30 p-3 z-40 animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="flex items-center justify-between pb-2 border-b border-[#eaedff]">
                     <span className="text-xs font-bold text-[#131b2e]">스마트 알림 리마인더</span>
                     <div className="flex items-center gap-1.5">

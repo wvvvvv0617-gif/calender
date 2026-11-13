@@ -2,6 +2,12 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
   signInWithPopup,
+  signInWithRedirect,
+  reauthenticateWithPopup,
+  getRedirectResult,
+  setPersistence,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
@@ -12,34 +18,108 @@ import firebaseConfig from '../../firebase-applet-config.json';
 export const DRIVE_FILE_NAME = 'ShiftMate_Backup_Data.json';
 export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
+// Google OAuth access tokens typically expire in 60 minutes; refresh safely at 55 minutes
+const ACCESS_TOKEN_TTL_MS = 55 * 60 * 1000;
+
 // Initialize Firebase App instance safely (prevent duplicate initializeApp calls)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/drive.file');
-// Prompt user to select account if needed
-provider.setCustomParameters({
-  prompt: 'select_account',
-});
+// Explicitly enforce durable persistence across PWA restarts & browser refreshes
+const persistenceReady: Promise<void> = setPersistence(auth, indexedDBLocalPersistence)
+  .catch(() => setPersistence(auth, browserLocalPersistence))
+  .catch((err) => {
+    console.warn('Firebase Auth persistence setup warning:', err);
+  });
 
 let isSigningIn = false;
+// Access tokens are kept strictly in-memory (never persisted to localStorage/sessionStorage)
 let cachedAccessToken: string | null = null;
+let cachedTokenExpiresAt = 0;
+
+const setCachedAccessToken = (token: string | null) => {
+  cachedAccessToken = token;
+  cachedTokenExpiresAt = token ? Date.now() + ACCESS_TOKEN_TTL_MS : 0;
+};
+
+const isAccessTokenValid = (): boolean => {
+  return !!cachedAccessToken && Date.now() < cachedTokenExpiresAt;
+};
+
+export const hasValidAccessToken = (): boolean => {
+  return isAccessTokenValid();
+};
+
+export const clearAccessToken = (): void => {
+  setCachedAccessToken(null);
+};
+
+export class DriveApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'DriveApiError';
+    this.status = status;
+  }
+}
+
+const buildGoogleProvider = (options?: {
+  forceAccountSelect?: boolean;
+  loginHint?: string | null;
+}): GoogleAuthProvider => {
+  const provider = new GoogleAuthProvider();
+  for (const scope of DRIVE_SCOPES) {
+    provider.addScope(scope);
+  }
+  const effectiveHint = options?.loginHint || auth.currentUser?.email || null;
+  if (options?.forceAccountSelect || !effectiveHint) {
+    provider.setCustomParameters({
+      prompt: 'select_account',
+    });
+  } else {
+    provider.setCustomParameters({
+      login_hint: effectiveHint,
+    });
+  }
+  return provider;
+};
 
 /**
  * Initialize auth state listener.
- * Cached token is managed strictly in-memory per security guidelines.
+ * Firebase Auth persists the signed-in Google account across reloads/PWA restarts,
+ * while the OAuth access token stays strictly in-memory.
  */
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
-  onAuthFailure?: () => void
+  onAuthSuccess?: (user: User, token: string | null) => void,
+  onAuthFailure?: () => void,
+  onRedirectError?: (error: any) => void
 ) => {
+  const redirectChecked = persistenceReady
+    .then(() => getRedirectResult(auth))
+    .then((result) => {
+      if (result) {
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          setCachedAccessToken(credential.accessToken);
+        }
+        return result;
+      }
+      return null;
+    })
+    .catch((err) => {
+      console.warn('Google redirect result warning:', err);
+      if (onRedirectError) onRedirectError(err);
+      return null;
+    });
+
   return onAuthStateChanged(auth, async (user: User | null) => {
-    if (user && cachedAccessToken) {
-      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
+    await redirectChecked;
+    if (user) {
+      const validToken = isAccessTokenValid() ? cachedAccessToken : null;
+      if (onAuthSuccess) onAuthSuccess(user, validToken);
     } else {
       if (!isSigningIn) {
-        cachedAccessToken = null;
+        setCachedAccessToken(null);
         if (onAuthFailure) onAuthFailure();
       }
     }
@@ -47,20 +127,61 @@ export const initAuth = (
 };
 
 /**
- * Sign in with Google Popup and obtain access token
+ * Sign in (or refresh token) with Google Popup, falling back to Redirect on standalone PWA if popups are blocked
  */
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+export const googleSignIn = async (options?: {
+  forceAccountSelect?: boolean;
+  loginHint?: string | null;
+}): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
+    await persistenceReady;
+
+    const customProvider = buildGoogleProvider(options);
+    let result;
+
+    if (auth.currentUser && !options?.forceAccountSelect) {
+      try {
+        result = await reauthenticateWithPopup(auth.currentUser, customProvider);
+      } catch (reauthErr: any) {
+        if (
+          reauthErr?.code === 'auth/user-mismatch' ||
+          reauthErr?.code === 'auth/credential-already-in-use'
+        ) {
+          result = await signInWithPopup(
+            auth,
+            buildGoogleProvider({ ...options, forceAccountSelect: true })
+          );
+        } else {
+          throw reauthErr;
+        }
+      }
+    } else {
+      result = await signInWithPopup(auth, customProvider);
+    }
+
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error('구글 인증 토큰(Access Token)을 가져오지 못했습니다.');
     }
 
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
+    setCachedAccessToken(credential.accessToken);
+    return { user: result.user, accessToken: credential.accessToken };
   } catch (error: any) {
+    // Fallback to redirect flow if popup is blocked on top-level PWA/mobile webview
+    if (
+      error?.code === 'auth/popup-blocked' &&
+      typeof window !== 'undefined' &&
+      window.self === window.top
+    ) {
+      try {
+        await signInWithRedirect(auth, buildGoogleProvider(options));
+        return null;
+      } catch (redirectErr) {
+        console.error('Google Redirect Sign-in error:', redirectErr);
+        throw redirectErr;
+      }
+    }
     console.error('Google Sign-in error:', error);
     throw error;
   } finally {
@@ -69,9 +190,13 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 /**
- * Return current cached access token in memory
+ * Return current valid in-memory access token (null if missing or expired)
  */
 export const getAccessToken = async (): Promise<string | null> => {
+  if (!isAccessTokenValid()) {
+    setCachedAccessToken(null);
+    return null;
+  }
   return cachedAccessToken;
 };
 
@@ -80,7 +205,7 @@ export const getAccessToken = async (): Promise<string | null> => {
  */
 export const logout = async (): Promise<void> => {
   await signOut(auth);
-  cachedAccessToken = null;
+  setCachedAccessToken(null);
 };
 
 export interface DriveFileInfo {
@@ -107,7 +232,10 @@ export const findDriveBackupFile = async (accessToken: string): Promise<DriveFil
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `드라이브 파일 조회 실패 (HTTP ${response.status})`);
+    throw new DriveApiError(
+      errorData?.error?.message || `드라이브 파일 조회 실패 (HTTP ${response.status})`,
+      response.status
+    );
   }
 
   const data = await response.json();
@@ -131,7 +259,7 @@ export const readDriveBackupFile = async (accessToken: string, fileId: string): 
   });
 
   if (!response.ok) {
-    throw new Error(`드라이브 파일 내용 다운로드 실패 (HTTP ${response.status})`);
+    throw new DriveApiError(`드라이브 파일 내용 다운로드 실패 (HTTP ${response.status})`, response.status);
   }
 
   return await response.text();
@@ -161,7 +289,10 @@ export const saveToGoogleDrive = async (
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `드라이브 파일 업데이트 실패 (HTTP ${response.status})`);
+      throw new DriveApiError(
+        err?.error?.message || `드라이브 파일 업데이트 실패 (HTTP ${response.status})`,
+        response.status
+      );
     }
 
     const updated = await response.json();
@@ -189,7 +320,10 @@ export const saveToGoogleDrive = async (
 
     if (!createRes.ok) {
       const err = await createRes.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `드라이브 파일 생성 실패 (HTTP ${createRes.status})`);
+      throw new DriveApiError(
+        err?.error?.message || `드라이브 파일 생성 실패 (HTTP ${createRes.status})`,
+        createRes.status
+      );
     }
 
     const newFile = await createRes.json();
@@ -208,7 +342,10 @@ export const saveToGoogleDrive = async (
 
     if (!uploadRes.ok) {
       const err = await uploadRes.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `드라이브 파일 업로드 실패 (HTTP ${uploadRes.status})`);
+      throw new DriveApiError(
+        err?.error?.message || `드라이브 파일 업로드 실패 (HTTP ${uploadRes.status})`,
+        uploadRes.status
+      );
     }
 
     const uploaded = await uploadRes.json();

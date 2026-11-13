@@ -19,6 +19,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { TermsModal } from './components/TermsModal';
 import { DataSafetyModal } from './components/DataSafetyModal';
 import { DriveConfirmDialog } from './components/DriveConfirmDialog';
+import { DriveReconnectBanner } from './components/DriveReconnectBanner';
 
 const MainLayout: React.FC = () => {
   const { activeTab, toastMessage, driveConfirmDialogProps } = useShift();
@@ -45,12 +46,13 @@ const MainLayout: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased">
+    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased overflow-x-hidden">
       {/* Top Application Bar */}
       <Header />
 
       {/* Main Screen Content */}
       <main className="flex-1 w-full pt-2">
+        <DriveReconnectBanner />
         {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'add-shift' && <AddShiftView />}
         {activeTab === 'payroll-summary' && <PayrollView />}

@@ -171,7 +171,7 @@ export const ProfileModal: React.FC = () => {
           {/* Quick Avatar Characters */}
           <div className="flex flex-col gap-1.5 pt-2 border-t border-[#eaedff]">
             <span className="text-[11px] font-bold text-[#434655]">추천 캐릭터/아이콘 선택</span>
-            <div className="grid grid-cols-6 gap-1.5">
+            <div className="grid grid-cols-3 min-[360px]:grid-cols-6 gap-1.5">
               {AVATAR_PRESETS.map((p) => (
                 <button
                   key={p.id}
@@ -225,7 +225,7 @@ export const ProfileModal: React.FC = () => {
               <span className="text-[10px] text-[#737686]">총 {allShiftsCount}건 저장됨</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
               <button
                 type="button"
                 onClick={() =>
