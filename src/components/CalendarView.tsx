@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useShift } from '../context/ShiftContext';
 import { formatKRW, calculateShiftPay, calculatePaydayDDay } from '../utils/calculations';
 import { getKoreanHoliday, getHolidaysForMonth } from '../utils/holidays';
@@ -59,8 +59,8 @@ export const CalendarView: React.FC = () => {
     return map;
   }, [presets]);
 
-  // Long press timer ref for mobile touch deletion
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Pending shift deletion confirmation state (prevents accidental deletions)
+  const [pendingDeleteDate, setPendingDeleteDate] = useState<string | null>(null);
 
   // Dynamic D-Day for Payday
   const paydayDDay = useMemo(() => {
@@ -323,8 +323,387 @@ export const CalendarView: React.FC = () => {
     return monthShifts;
   }, [monthShifts, listFilter]);
 
+  // Detect coarse/touch pointers so HTML5 drag-and-drop never hijacks mobile touch scrolling
+  const isTouchDevice = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      window.matchMedia?.('(pointer: coarse)').matches ||
+      'ontouchstart' in window ||
+      (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+    );
+  }, []);
+
+  // 3-second strictly scroll-safe long-press delete state
+  // Cancels immediately if the screen scrolls anywhere, the touched cell moves on screen,
+  // or the finger/pointer moves even slightly (>5px).
+  const LONG_PRESS_DELETE_MS = 3000;
+  const LONG_PRESS_VISUAL_DELAY_MS = 500;
+  const LONG_PRESS_MOVE_PX = 5;
+  const LONG_PRESS_SCROLL_PX = 1;
+  const LONG_PRESS_RECT_DRIFT_PX = 1.5;
+  const RECENT_SCROLL_COOLDOWN_MS = 450;
+
+  const getCurrentScrollMetrics = useCallback(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return { x: 0, y: 0, docTop: 0, docLeft: 0, vvTop: 0, vvLeft: 0 };
+    }
+    const scrollingEl = document.scrollingElement || document.documentElement;
+    return {
+      x: window.scrollX || window.pageXOffset || 0,
+      y: window.scrollY || window.pageYOffset || 0,
+      docTop: (scrollingEl?.scrollTop || 0) + (document.body?.scrollTop || 0),
+      docLeft: (scrollingEl?.scrollLeft || 0) + (document.body?.scrollLeft || 0),
+      vvTop: window.visualViewport?.offsetTop ?? 0,
+      vvLeft: window.visualViewport?.offsetLeft ?? 0,
+    };
+  }, []);
+
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressWatchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollEventCounterRef = useRef<number>(0);
+  const lastScrollTimeRef = useRef<number>(0);
+  const touchTrackRef = useRef<{
+    dateStr: string;
+    targetEl: HTMLElement | null;
+    startClientX: number;
+    startClientY: number;
+    startPageX: number;
+    startPageY: number;
+    startRectTop: number;
+    startRectLeft: number;
+    startScrollX: number;
+    startScrollY: number;
+    startDocTop: number;
+    startDocLeft: number;
+    startVvTop: number;
+    startVvLeft: number;
+    startScrollEpoch: number;
+    startedAt: number;
+    cancelled: boolean;
+    isTouch: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef<boolean>(false);
+  const lastTouchTimeRef = useRef<number>(0);
+  const [pressingInfo, setPressingInfo] = useState<{
+    dateStr: string;
+    progress: number;
+    remainingSec: number;
+  } | null>(null);
+
+  const pressingDateStr = pressingInfo?.dateStr ?? null;
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (longPressWatchdogRef.current) {
+      clearInterval(longPressWatchdogRef.current);
+      longPressWatchdogRef.current = null;
+    }
+    if (touchTrackRef.current) {
+      touchTrackRef.current.cancelled = true;
+      touchTrackRef.current = null;
+    }
+    setPressingInfo(null);
+  }, []);
+
+  const hasViewportOrElementMoved = useCallback(
+    (state: NonNullable<typeof touchTrackRef.current>) => {
+      if (state.cancelled) return true;
+      if (scrollEventCounterRef.current !== state.startScrollEpoch) return true;
+
+      const cur = getCurrentScrollMetrics();
+      if (
+        Math.abs(cur.x - state.startScrollX) > LONG_PRESS_SCROLL_PX ||
+        Math.abs(cur.y - state.startScrollY) > LONG_PRESS_SCROLL_PX ||
+        Math.abs(cur.docTop - state.startDocTop) > LONG_PRESS_SCROLL_PX ||
+        Math.abs(cur.docLeft - state.startDocLeft) > LONG_PRESS_SCROLL_PX ||
+        Math.abs(cur.vvTop - state.startVvTop) > LONG_PRESS_SCROLL_PX ||
+        Math.abs(cur.vvLeft - state.startVvLeft) > LONG_PRESS_SCROLL_PX
+      ) {
+        return true;
+      }
+
+      if (state.targetEl && state.targetEl.isConnected) {
+        const rect = state.targetEl.getBoundingClientRect();
+        if (
+          Math.abs(rect.top - state.startRectTop) > LONG_PRESS_RECT_DRIFT_PX ||
+          Math.abs(rect.left - state.startRectLeft) > LONG_PRESS_RECT_DRIFT_PX
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [getCurrentScrollMetrics]
+  );
+
+  // Global capture listeners: cancel immediately on ANY scroll, wheel, pointer/touch movement, or OS cancel
+  useEffect(() => {
+    const handleAnyScroll = () => {
+      scrollEventCounterRef.current += 1;
+      lastScrollTimeRef.current = Date.now();
+      if (touchTrackRef.current || longPressTimerRef.current || longPressWatchdogRef.current) {
+        cancelLongPress();
+      }
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      const state = touchTrackRef.current;
+      if (!state || !state.isTouch) return;
+      if (e.touches.length !== 1) {
+        cancelLongPress();
+        return;
+      }
+      const touch = e.touches[0];
+      const dxClient = Math.abs(touch.clientX - state.startClientX);
+      const dyClient = Math.abs(touch.clientY - state.startClientY);
+      const dxPage = Math.abs(touch.pageX - state.startPageX);
+      const dyPage = Math.abs(touch.pageY - state.startPageY);
+      if (
+        dxClient > LONG_PRESS_MOVE_PX ||
+        dyClient > LONG_PRESS_MOVE_PX ||
+        dxPage > LONG_PRESS_MOVE_PX ||
+        dyPage > LONG_PRESS_MOVE_PX ||
+        hasViewportOrElementMoved(state)
+      ) {
+        lastScrollTimeRef.current = Date.now();
+        cancelLongPress();
+      }
+    };
+
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      const state = touchTrackRef.current;
+      if (!state) return;
+      const dxClient = Math.abs(e.clientX - state.startClientX);
+      const dyClient = Math.abs(e.clientY - state.startClientY);
+      const dxPage = Math.abs(e.pageX - state.startPageX);
+      const dyPage = Math.abs(e.pageY - state.startPageY);
+      if (
+        dxClient > LONG_PRESS_MOVE_PX ||
+        dyClient > LONG_PRESS_MOVE_PX ||
+        dxPage > LONG_PRESS_MOVE_PX ||
+        dyPage > LONG_PRESS_MOVE_PX ||
+        hasViewportOrElementMoved(state)
+      ) {
+        cancelLongPress();
+      }
+    };
+
+    const handleGlobalCancel = () => {
+      if (touchTrackRef.current || longPressTimerRef.current || longPressWatchdogRef.current) {
+        cancelLongPress();
+      }
+    };
+
+    window.addEventListener('scroll', handleAnyScroll, { capture: true, passive: true });
+    document.addEventListener('scroll', handleAnyScroll, { capture: true, passive: true });
+    window.addEventListener('wheel', handleAnyScroll, { passive: true });
+    window.addEventListener('touchmove', handleGlobalTouchMove, { capture: true, passive: true });
+    window.addEventListener('pointermove', handleGlobalPointerMove, { capture: true, passive: true });
+    window.addEventListener('pointercancel', handleGlobalCancel, { capture: true, passive: true });
+    window.addEventListener('touchcancel', handleGlobalCancel, { capture: true, passive: true });
+    window.addEventListener('touchend', handleGlobalCancel, { capture: true, passive: true });
+    window.addEventListener('blur', handleGlobalCancel);
+    document.addEventListener('visibilitychange', handleGlobalCancel);
+
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    vv?.addEventListener('scroll', handleAnyScroll);
+    vv?.addEventListener('resize', handleAnyScroll);
+
+    return () => {
+      window.removeEventListener('scroll', handleAnyScroll, true);
+      document.removeEventListener('scroll', handleAnyScroll, true);
+      window.removeEventListener('wheel', handleAnyScroll);
+      window.removeEventListener('touchmove', handleGlobalTouchMove, true);
+      window.removeEventListener('pointermove', handleGlobalPointerMove, true);
+      window.removeEventListener('pointercancel', handleGlobalCancel, true);
+      window.removeEventListener('touchcancel', handleGlobalCancel, true);
+      window.removeEventListener('touchend', handleGlobalCancel, true);
+      window.removeEventListener('blur', handleGlobalCancel);
+      document.removeEventListener('visibilitychange', handleGlobalCancel);
+      vv?.removeEventListener('scroll', handleAnyScroll);
+      vv?.removeEventListener('resize', handleAnyScroll);
+      cancelLongPress();
+    };
+  }, [cancelLongPress, hasViewportOrElementMoved]);
+
+  // Request confirmation before deleting a shift (prevents accidental deletion during touch/scroll)
+  const requestDeleteShift = useCallback(
+    (dateStr: string) => {
+      const existing = shiftMap.get(dateStr);
+      if (!existing) {
+        showToast('선택한 날짜에 삭제할 근무 기록이 없습니다.');
+        return;
+      }
+      setPendingDeleteDate(dateStr);
+    },
+    [shiftMap, showToast]
+  );
+
+  const startCellLongPress = useCallback(
+    (
+      dateStr: string,
+      targetEl: HTMLElement | null,
+      clientX: number,
+      clientY: number,
+      pageX: number,
+      pageY: number,
+      isTouch: boolean
+    ) => {
+      cancelLongPress();
+
+      // Do not arm long-press if there is no shift on this date or if the screen was just scrolled
+      if (!shiftMap.get(dateStr)) return;
+      if (Date.now() - lastScrollTimeRef.current < RECENT_SCROLL_COOLDOWN_MS) return;
+
+      const scrollMetrics = getCurrentScrollMetrics();
+      const rect = targetEl ? targetEl.getBoundingClientRect() : { top: 0, left: 0 };
+
+      const state = {
+        dateStr,
+        targetEl,
+        startClientX: clientX,
+        startClientY: clientY,
+        startPageX: pageX,
+        startPageY: pageY,
+        startRectTop: rect.top,
+        startRectLeft: rect.left,
+        startScrollX: scrollMetrics.x,
+        startScrollY: scrollMetrics.y,
+        startDocTop: scrollMetrics.docTop,
+        startDocLeft: scrollMetrics.docLeft,
+        startVvTop: scrollMetrics.vvTop,
+        startVvLeft: scrollMetrics.vvLeft,
+        startScrollEpoch: scrollEventCounterRef.current,
+        startedAt: Date.now(),
+        cancelled: false,
+        isTouch,
+      };
+      touchTrackRef.current = state;
+      suppressClickRef.current = false;
+
+      // Continuous watchdog every 80ms: detects any scroll/layout shift/rect movement immediately
+      // and updates countdown indicator only after 0.5s of 100% stationary press
+      longPressWatchdogRef.current = setInterval(() => {
+        if (state.cancelled || touchTrackRef.current !== state || hasViewportOrElementMoved(state)) {
+          cancelLongPress();
+          return;
+        }
+        const elapsed = Date.now() - state.startedAt;
+        if (elapsed >= LONG_PRESS_VISUAL_DELAY_MS) {
+          const progress = Math.min(100, Math.round((elapsed / LONG_PRESS_DELETE_MS) * 100));
+          const remainingSec = Math.max(1, Math.ceil((LONG_PRESS_DELETE_MS - elapsed) / 1000));
+          setPressingInfo({ dateStr, progress, remainingSec });
+        }
+      }, 80);
+
+      // Trigger delete confirmation strictly after 3.0 seconds of 100% stationary hold
+      longPressTimerRef.current = setTimeout(() => {
+        if (state.cancelled || touchTrackRef.current !== state || hasViewportOrElementMoved(state)) {
+          cancelLongPress();
+          return;
+        }
+
+        cancelLongPress();
+        suppressClickRef.current = true;
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(40);
+        }
+        setSelectedDate(dateStr);
+        requestDeleteShift(dateStr);
+      }, LONG_PRESS_DELETE_MS);
+    },
+    [cancelLongPress, shiftMap, getCurrentScrollMetrics, hasViewportOrElementMoved, setSelectedDate, requestDeleteShift]
+  );
+
+  const handleCellTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>, dateStr: string) => {
+      lastTouchTimeRef.current = Date.now();
+      if (e.touches.length !== 1) {
+        cancelLongPress();
+        return;
+      }
+      const touch = e.touches[0];
+      startCellLongPress(
+        dateStr,
+        e.currentTarget,
+        touch.clientX,
+        touch.clientY,
+        touch.pageX,
+        touch.pageY,
+        true
+      );
+    },
+    [cancelLongPress, startCellLongPress]
+  );
+
+  const handleCellTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      const state = touchTrackRef.current;
+      if (!state || !state.isTouch) return;
+      if (e.touches.length !== 1) {
+        cancelLongPress();
+        return;
+      }
+      const touch = e.touches[0];
+      const dxClient = Math.abs(touch.clientX - state.startClientX);
+      const dyClient = Math.abs(touch.clientY - state.startClientY);
+      const dxPage = Math.abs(touch.pageX - state.startPageX);
+      const dyPage = Math.abs(touch.pageY - state.startPageY);
+      if (
+        dxClient > LONG_PRESS_MOVE_PX ||
+        dyClient > LONG_PRESS_MOVE_PX ||
+        dxPage > LONG_PRESS_MOVE_PX ||
+        dyPage > LONG_PRESS_MOVE_PX ||
+        hasViewportOrElementMoved(state)
+      ) {
+        lastScrollTimeRef.current = Date.now();
+        cancelLongPress();
+      }
+    },
+    [cancelLongPress, hasViewportOrElementMoved]
+  );
+
+  const handleCellMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, dateStr: string) => {
+      if (e.button !== 0) return;
+      // Ignore synthetic mouse events fired after mobile touch interactions
+      if (isTouchDevice || Date.now() - lastTouchTimeRef.current < 1500) return;
+      startCellLongPress(dateStr, e.currentTarget, e.clientX, e.clientY, e.pageX, e.pageY, false);
+    },
+    [isTouchDevice, startCellLongPress]
+  );
+
+  const handleCellMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const state = touchTrackRef.current;
+      if (!state || state.isTouch) return;
+      const dxClient = Math.abs(e.clientX - state.startClientX);
+      const dyClient = Math.abs(e.clientY - state.startClientY);
+      const dxPage = Math.abs(e.pageX - state.startPageX);
+      const dyPage = Math.abs(e.pageY - state.startPageY);
+      if (
+        dxClient > LONG_PRESS_MOVE_PX ||
+        dyClient > LONG_PRESS_MOVE_PX ||
+        dxPage > LONG_PRESS_MOVE_PX ||
+        dyPage > LONG_PRESS_MOVE_PX ||
+        hasViewportOrElementMoved(state)
+      ) {
+        cancelLongPress();
+      }
+    },
+    [cancelLongPress, hasViewportOrElementMoved]
+  );
+
   // Click handler for day cell
   const handleDayClick = (dateStr: string) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     setSelectedDate(dateStr);
 
     if (isQuickStampActive && quickStampPresetId) {
@@ -334,51 +713,34 @@ export const CalendarView: React.FC = () => {
     }
   };
 
-  // Right-click context menu deletion handler
-  const handleContextMenu = (e: React.MouseEvent, dateStr: string) => {
-    e.preventDefault();
-    const existing = shiftMap.get(dateStr);
-    if (existing) {
-      deleteShiftByDate(dateStr);
-      showToast(`${dateStr} 근무가 삭제되었습니다.`);
-    }
+  const confirmDeleteShift = () => {
+    if (!pendingDeleteDate) return;
+    deleteShiftByDate(pendingDeleteDate);
+    showToast(`${pendingDeleteDate} 근무가 삭제되었습니다.`);
+    setPendingDeleteDate(null);
   };
 
-  // Mobile long-press deletion handler
-  const handleTouchStart = (dateStr: string) => {
-    longPressTimerRef.current = setTimeout(() => {
-      const existing = shiftMap.get(dateStr);
-      if (existing) {
-        if (window.navigator?.vibrate) {
-          window.navigator.vibrate(50);
-        }
-        deleteShiftByDate(dateStr);
-        showToast(`${dateStr} 근무가 롱터치로 삭제되었습니다.`);
-      }
-    }, 600);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
-
-  // Drag and drop handlers
+  // Drag and drop handlers (desktop only — disabled on touch screens so scrolling never drops/deletes shifts)
   const handleDragStart = (e: React.DragEvent, dateStr: string) => {
+    if (isTouchDevice) {
+      e.preventDefault();
+      return;
+    }
+    cancelLongPress();
     setDraggedFromDate(dateStr);
     e.dataTransfer.setData('text/plain', dateStr);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (isTouchDevice) return;
     e.preventDefault();
   };
 
   const handleDrop = (dateStr: string) => {
+    if (isTouchDevice) return;
     if (draggedPresetId) {
       if (draggedPresetId === 'DELETE_TOOL') {
-        deleteShiftByDate(dateStr);
+        requestDeleteShift(dateStr);
       } else {
         stampPresetOnDate(dateStr, draggedPresetId);
       }
@@ -394,11 +756,12 @@ export const CalendarView: React.FC = () => {
   };
 
   const handleTrashDrop = (e: React.DragEvent) => {
+    if (isTouchDevice) return;
     e.preventDefault();
     if (draggedFromDate) {
-      deleteShiftByDate(draggedFromDate);
+      const targetDate = draggedFromDate;
       setDraggedFromDate(null);
-      showToast('휴지통으로 드래그하여 근무가 삭제되었습니다.');
+      requestDeleteShift(targetDate);
     }
   };
 
@@ -685,11 +1048,18 @@ export const CalendarView: React.FC = () => {
                 </span>
               )}
             </div>
-            <span className="text-[#434655] text-[10px] sm:text-[11px] flex items-center gap-1">
-              <span className="material-symbols-outlined text-[13px] sm:text-[14px] text-[#ad0033]">delete</span>
-              <span className="sm:hidden">날짜 꾹 눌러 삭제</span>
-              <span className="hidden sm:inline">우클릭 또는 꾹 누르면 삭제 · 하단 휴지통으로 드래그 삭제</span>
-            </span>
+            {pressingInfo ? (
+              <span className="text-[#ad0033] text-[10px] sm:text-[11px] font-bold flex items-center gap-1 tabular-nums">
+                <span className="material-symbols-outlined text-[13px] sm:text-[14px]">timer</span>
+                <span>삭제까지 {pressingInfo.remainingSec}초 (움직이거나 스크롤 시 즉시 취소)</span>
+              </span>
+            ) : (
+              <span className="text-[#434655] text-[10px] sm:text-[11px] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] sm:text-[14px] text-[#004ac6]">shield</span>
+                <span className="sm:hidden">3초 꾹 누르기(스크롤 시 취소) · [삭제]</span>
+                <span className="hidden sm:inline">3초 꾹 누르기 또는 [삭제] 버튼 (스크롤 시 자동 취소)</span>
+              </span>
+            )}
           </div>
 
           {/* Monthly Public Holidays Summary Banner (공휴일 요약 표시) */}
@@ -760,27 +1130,35 @@ export const CalendarView: React.FC = () => {
               // Shift theme palette
               const palette = getShiftColorPalette(shift, presetMap);
 
+              const isPressingDelete = pressingDateStr === cell.dateStr;
+
               return (
                 <div
                   key={cell.dateStr}
                   onClick={() => handleDayClick(cell.dateStr)}
-                  onContextMenu={(e) => handleContextMenu(e, cell.dateStr)}
-                  onTouchStart={() => handleTouchStart(cell.dateStr)}
-                  onTouchEnd={handleTouchEnd}
-                  onTouchCancel={handleTouchEnd}
+                  onTouchStart={(e) => handleCellTouchStart(e, cell.dateStr)}
+                  onTouchMove={handleCellTouchMove}
+                  onTouchEnd={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
+                  onMouseDown={(e) => handleCellMouseDown(e, cell.dateStr)}
+                  onMouseMove={handleCellMouseMove}
+                  onMouseUp={cancelLongPress}
+                  onMouseLeave={cancelLongPress}
                   onDragOver={handleDragOver}
                   onDrop={() => handleDrop(cell.dateStr)}
-                  draggable={!!shift}
-                  onDragStart={(e) => handleDragStart(e, cell.dateStr)}
+                  draggable={!isTouchDevice && !!shift}
+                  onDragStart={(e) => {
+                    handleDragStart(e, cell.dateStr);
+                  }}
                   title={
                     holiday
-                      ? `법정 공휴일: ${holiday.name}${shift ? ` · ${shift.name}` : ''}`
+                      ? `법정 공휴일: ${holiday.name}${shift ? ` · ${shift.name} (3초 꾹 누르면 삭제)` : ''}`
                       : shift
-                      ? `${shift.name} (우클릭 또는 꾹 눌러서 삭제)`
+                      ? `${shift.name} (탭하여 상세 보기 · 3초 꾹 누르면 삭제)`
                       : '탭하여 근무 등록'
                   }
                   style={
-                    isSelected
+                    isSelected && !isPressingDelete
                       ? {
                           borderColor: isHoliday
                             ? '#b30026'
@@ -795,10 +1173,12 @@ export const CalendarView: React.FC = () => {
                         }
                       : undefined
                   }
-                  className={`flex flex-col items-center py-1 sm:py-1.5 px-0.5 rounded-lg sm:rounded-xl transition-all min-h-[58px] sm:min-h-[76px] md:min-h-[82px] relative cursor-pointer select-none border ${
+                  className={`flex flex-col items-center py-1 sm:py-1.5 px-0.5 rounded-lg sm:rounded-xl transition-all min-h-[58px] sm:min-h-[76px] md:min-h-[82px] relative cursor-pointer select-none border overflow-hidden ${
                     !cell.isCurrentMonth ? 'opacity-35' : ''
                   } ${
-                    isSelected
+                    isPressingDelete
+                      ? 'border-2 border-[#ad0033] bg-[#ffdad6]/50 ring-2 ring-[#ad0033]/35 scale-[0.97]'
+                      : isSelected
                       ? 'border-2 shadow-sm scale-[1.01] sm:scale-[1.02]'
                       : isToday
                       ? isHoliday
@@ -809,6 +1189,13 @@ export const CalendarView: React.FC = () => {
                       : 'hover:bg-[#f2f3ff] border-transparent'
                   }`}
                 >
+                  {/* 3-Second Stationary Long-Press Progress Bar */}
+                  {isPressingDelete && pressingInfo && (
+                    <div
+                      className="absolute bottom-0 left-0 h-1 bg-[#ad0033] transition-all duration-75 pointer-events-none"
+                      style={{ width: `${pressingInfo.progress}%` }}
+                    />
+                  )}
                   {/* Date Number Badge (공휴일 & 일요일 빨간색 표기) */}
                   <div className="flex items-center gap-0.5">
                     <span
@@ -880,8 +1267,7 @@ export const CalendarView: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteShiftByDate(cell.dateStr);
-                          showToast(`${cell.dateStr} 근무가 삭제되었습니다.`);
+                          requestDeleteShift(cell.dateStr);
                         }}
                         className="hidden md:group-hover:flex absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#ad0033] text-white items-center justify-center text-[10px] shadow-xs cursor-pointer"
                         title="근무 삭제"
@@ -945,23 +1331,34 @@ export const CalendarView: React.FC = () => {
               const shiftCalc = shift ? calculateShiftPay(shift) : null;
               const palette = getShiftColorPalette(shift, presetMap);
 
+              const isPressingDelete = pressingDateStr === day.dateStr;
+
               return (
                 <div
                   key={day.dateStr}
                   onClick={() => handleDayClick(day.dateStr)}
-                  onContextMenu={(e) => handleContextMenu(e, day.dateStr)}
+                  onTouchStart={(e) => handleCellTouchStart(e, day.dateStr)}
+                  onTouchMove={handleCellTouchMove}
+                  onTouchEnd={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
+                  onMouseDown={(e) => handleCellMouseDown(e, day.dateStr)}
+                  onMouseMove={handleCellMouseMove}
+                  onMouseUp={cancelLongPress}
+                  onMouseLeave={cancelLongPress}
                   onDragOver={handleDragOver}
                   onDrop={() => handleDrop(day.dateStr)}
                   style={
-                    isSelected
+                    isSelected && !isPressingDelete
                       ? {
                           borderColor: isHoliday ? '#b30026' : shift ? palette.hex : '#004ac6',
                           backgroundColor: isHoliday ? '#ffebee80' : shift ? palette.softBgHex + '33' : '#dbe1ff33',
                         }
                       : undefined
                   }
-                  className={`flex flex-col rounded-2xl p-3 border transition-all cursor-pointer relative ${
-                    isSelected
+                  className={`flex flex-col rounded-2xl p-3 border transition-all cursor-pointer relative select-none ${
+                    isPressingDelete
+                      ? 'border-2 border-[#ad0033] bg-[#ffdad6]/50 ring-2 ring-[#ad0033]/35 scale-[0.98]'
+                      : isSelected
                       ? 'shadow-sm ring-2 ring-[#004ac6]/20'
                       : isToday
                       ? isHoliday
@@ -1026,8 +1423,7 @@ export const CalendarView: React.FC = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteShiftByDate(day.dateStr);
-                              showToast(`${day.dateStr} 근무가 삭제되었습니다.`);
+                              requestDeleteShift(day.dateStr);
                             }}
                             className="w-5 h-5 rounded-full hover:bg-[#ffdad6] text-[#ad0033] flex items-center justify-center transition-colors cursor-pointer"
                             title="삭제"
@@ -1243,8 +1639,7 @@ export const CalendarView: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteShiftByDate(shift.date);
-                            showToast(`${shift.date} 근무가 삭제되었습니다.`);
+                            requestDeleteShift(shift.date);
                           }}
                           className="w-8 h-8 rounded-full bg-white hover:bg-[#ffdad6] text-[#ad0033] flex items-center justify-center border border-[#c3c6d7]/30 shadow-xs cursor-pointer active:scale-90"
                           title="삭제"
@@ -1273,7 +1668,185 @@ export const CalendarView: React.FC = () => {
         </section>
       )}
 
-      {/* 4. Selected Date Details Card (Matched to Preset Color Theme & Holiday Highlight) */}
+      {/* 4. Quick Preset Action Bar (원터치 퀵 등록 — positioned directly below the Calendar) */}
+      <section className="bg-white rounded-2xl p-2.5 sm:p-3.5 shadow-sm flex flex-col gap-1.5 sm:gap-2 border border-[#c3c6d7]/35">
+        <div className="flex items-center justify-between gap-1 px-0.5 sm:px-1">
+          <div className="flex items-center gap-1 text-[#004ac6] text-[11px] sm:text-xs font-bold min-w-0">
+            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">bolt</span>
+            <span className="truncate">원터치 퀵 등록</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-[#004ac6]/10 text-[#004ac6] text-[10px] font-bold tabular-nums shrink-0">
+              {selectedDate.slice(5)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={openDataSafetyModal}
+              className="hidden min-[380px]:flex text-[#006c49] bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold items-center gap-1 cursor-pointer transition-all active:scale-95"
+              type="button"
+              title="크롬 기록삭제 대비 데이터 자체 보관 및 복원"
+            >
+              <span className="material-symbols-outlined text-[14px]">security</span>
+              <span className="hidden sm:inline">데이터 안전보관</span>
+              <span className="sm:hidden">백업</span>
+            </button>
+            <button
+              onClick={() => openPresetModal()}
+              className="text-[#004ac6] hover:underline text-[11px] sm:text-xs font-bold flex items-center gap-0.5 cursor-pointer px-1"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[15px]">add</span>
+              <span>새 프리셋</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsQuickBarOpen((prev) => !prev)}
+              className="w-7 h-7 rounded-lg bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] flex items-center justify-center cursor-pointer sm:hidden"
+              aria-label={isQuickBarOpen ? '퀵 등록 바 접기' : '퀵 등록 바 펼치기'}
+              title={isQuickBarOpen ? '접기' : '펼치기'}
+            >
+              <span className="material-symbols-outlined text-[17px]">
+                {isQuickBarOpen ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {(isQuickBarOpen || isQuickStampActive) && (
+          <>
+            {/* Dynamic Tip / Active Stamp Banner */}
+            {isQuickStampActive && quickStampPresetId ? (
+              <div className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#004ac6] text-white flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-[#ffe082] shrink-0">touch_app</span>
+                  <div className="text-[11px] sm:text-xs font-semibold truncate">
+                    <strong>[{presets.find((p) => p.id === quickStampPresetId)?.name || '프리셋'}]</strong> → 달력 날짜를 연속 탭!
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleExitQuickStamp('원터치 등록 모드가 해제되었습니다.')}
+                  className="shrink-0 px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+                >
+                  <span>완료/해제</span>
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+            ) : (
+              <div className="hidden sm:flex px-2.5 py-1.5 rounded-lg bg-[#f2f3ff] items-center justify-between gap-1 text-[11px] text-[#434655] leading-tight">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#004ac6] text-[15px] shrink-0">touch_app</span>
+                  <span>
+                    <strong className="text-[#131b2e] font-semibold">원터치 등록:</strong> 아래 프리셋을 먼저 누른 후, 달력에서 원하는 날짜를 누르면 적용됩니다.
+                  </span>
+                </div>
+                <span className="material-symbols-outlined text-[#737686] text-[14px] shrink-0">drag_indicator</span>
+              </div>
+            )}
+
+            {/* Horizontal Quick Preset Chips + Trash Can Drop Zone */}
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 pt-0.5">
+              {presets.map((preset) => {
+                const isSelectedForStamp = isQuickStampActive && quickStampPresetId === preset.id;
+                const presetPal = PRESET_COLOR_PALETTES[preset.colorTheme || preset.badgeTheme] || PRESET_COLOR_PALETTES.blue;
+                return (
+                  <button
+                    key={preset.id}
+                    draggable={!isTouchDevice}
+                    onDragStart={(e) => {
+                      if (isTouchDevice) {
+                        e.preventDefault();
+                        return;
+                      }
+                      setDraggedPresetId(preset.id);
+                    }}
+                    onClick={() => {
+                      if (isQuickStampActive && quickStampPresetId === preset.id) {
+                        handleExitQuickStamp(`'${preset.name}' 원터치 등록 모드가 해제되었습니다.`);
+                      } else {
+                        setQuickStampPresetId(preset.id);
+                        setIsQuickStampActive(true);
+                        showToast(`'${preset.name}' 선택됨! 달력에서 날짜를 누르면 적용됩니다.`);
+                      }
+                    }}
+                    className={`shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-left cursor-grab active:scale-95 transition-all ${
+                      isSelectedForStamp
+                        ? 'bg-white border-2 shadow-xs ring-2'
+                        : 'bg-[#f2f3ff] hover:bg-[#eaedff] border border-transparent'
+                    }`}
+                    style={
+                      isSelectedForStamp
+                        ? {
+                            borderColor: presetPal.hex,
+                            boxShadow: `0 0 0 2px ${presetPal.hex}25`,
+                          }
+                        : undefined
+                    }
+                    type="button"
+                  >
+                    <div
+                      className="flex items-center"
+                      style={{ color: presetPal.hex }}
+                    >
+                      <span className="hidden sm:inline material-symbols-outlined text-[15px] text-[#737686] opacity-60">
+                        drag_indicator
+                      </span>
+                      <span className="material-symbols-outlined text-[17px] sm:text-[18px] sm:ml-0.5">
+                        {isSelectedForStamp ? 'check_circle' : 'add_circle'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col pr-0.5 sm:pr-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] sm:text-xs font-bold text-[#131b2e]">{preset.name}</span>
+                        {isSelectedForStamp && (
+                          <span
+                            className="text-[9px] px-1 rounded text-white font-bold"
+                            style={{ backgroundColor: presetPal.hex }}
+                          >
+                            활성
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-[#434655] tabular-nums">
+                        {preset.startTime}-{preset.endTime}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Dedicated Trash / Remove Drop Zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDrop={handleTrashDrop}
+                onClick={() => requestDeleteShift(selectedDate)}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-[#ffdad6]/50 hover:bg-[#ffdad6] text-[#ad0033] border border-[#ad0033]/30 cursor-pointer active:scale-95 transition-all"
+                title="선택일 근무 삭제 (확인 창 표시)"
+              >
+                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">delete</span>
+                <div className="flex flex-col">
+                  <span className="text-[11px] sm:text-xs font-bold">선택일 삭제</span>
+                  <span className="text-[9px] sm:text-[10px] text-[#ad0033]/80">확인 후 삭제</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => openPresetModal()}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-dashed border-[#c3c6d7] hover:bg-[#eaedff] text-[#004ac6] active:scale-95 transition-all text-left cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">add_circle_outline</span>
+                <div className="flex flex-col">
+                  <span className="text-[11px] sm:text-xs font-bold text-[#004ac6]">새 프리셋</span>
+                  <span className="text-[9px] sm:text-[10px] text-[#434655]">시간/색상</span>
+                </div>
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* 5. Selected Date Details Card (근무 상세 — positioned directly below 원터치 퀵 등록) */}
       <section
         style={{
           borderColor: selectedShift
@@ -1320,10 +1893,7 @@ export const CalendarView: React.FC = () => {
           <div className="flex items-center gap-1 shrink-0">
             {selectedShift && (
               <button
-                onClick={() => {
-                  deleteShiftByDate(selectedDate);
-                  showToast(`${selectedDate} 근무가 삭제되었습니다.`);
-                }}
+                onClick={() => requestDeleteShift(selectedDate)}
                 className="flex items-center gap-1 text-xs text-[#ad0033] hover:bg-[#ffdad6]/40 px-2 sm:px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer"
                 title="해당 날짜 근무 삭제"
               >
@@ -1430,7 +2000,7 @@ export const CalendarView: React.FC = () => {
         )}
       </section>
 
-      {/* 5. Timesheet Document Bar */}
+      {/* 6. Timesheet Document Bar */}
       <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-[#c3c6d7]/30 flex items-center justify-between gap-2.5 sm:gap-3">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#dbe1ff]/60 text-[#004ac6] flex items-center justify-center shrink-0">
@@ -1455,180 +2025,47 @@ export const CalendarView: React.FC = () => {
         </button>
       </div>
 
-      {/* 6. Sticky Quick Preset Action Bar + Trash Drop Zone (Compact & Collapsible on Narrow Screens) */}
-      <div className="sticky bottom-17 sm:bottom-18 md:bottom-4 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-2 sm:p-3 shadow-xl flex flex-col gap-1.5 sm:gap-2 border border-[#eaedff]">
-        <div className="flex items-center justify-between gap-1 px-0.5 sm:px-1">
-          <div className="flex items-center gap-1 text-[#004ac6] text-[11px] sm:text-xs font-bold min-w-0">
-            <span className="material-symbols-outlined text-[15px] sm:text-[16px] shrink-0">bolt</span>
-            <span className="truncate">원터치 퀵 등록</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-[#004ac6]/10 text-[#004ac6] text-[10px] font-bold tabular-nums shrink-0">
-              {selectedDate.slice(5)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={openDataSafetyModal}
-              className="hidden min-[380px]:flex text-[#006c49] bg-[#6cf8bb]/30 hover:bg-[#6cf8bb]/50 px-2 sm:px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold items-center gap-1 cursor-pointer transition-all active:scale-95"
-              type="button"
-              title="크롬 기록삭제 대비 데이터 자체 보관 및 복원"
-            >
-              <span className="material-symbols-outlined text-[14px]">security</span>
-              <span className="hidden sm:inline">데이터 안전보관</span>
-              <span className="sm:hidden">백업</span>
-            </button>
-            <button
-              onClick={() => openPresetModal()}
-              className="text-[#004ac6] hover:underline text-[11px] sm:text-xs font-bold flex items-center gap-0.5 cursor-pointer px-1"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[15px]">add</span>
-              <span>새 프리셋</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsQuickBarOpen((prev) => !prev)}
-              className="w-7 h-7 rounded-lg bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] flex items-center justify-center cursor-pointer sm:hidden"
-              aria-label={isQuickBarOpen ? '퀵 등록 바 접기' : '퀵 등록 바 펼치기'}
-              title={isQuickBarOpen ? '접기' : '펼치기'}
-            >
-              <span className="material-symbols-outlined text-[17px]">
-                {isQuickBarOpen ? 'expand_more' : 'expand_less'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {(isQuickBarOpen || isQuickStampActive) && (
-          <>
-            {/* Dynamic Tip / Active Stamp Banner */}
-            {isQuickStampActive && quickStampPresetId ? (
-              <div className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#004ac6] text-white flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-[#ffe082] shrink-0">touch_app</span>
-                  <div className="text-[11px] sm:text-xs font-semibold truncate">
-                    <strong>[{presets.find((p) => p.id === quickStampPresetId)?.name || '프리셋'}]</strong> → 달력 날짜를 연속 탭!
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleExitQuickStamp('원터치 등록 모드가 해제되었습니다.')}
-                  className="shrink-0 px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1"
-                >
-                  <span>완료/해제</span>
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
+      {/* Shift Delete Confirmation Modal */}
+      {pendingDeleteDate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setPendingDeleteDate(null)}
+        >
+          <div
+            className="w-full max-w-xs sm:max-w-sm bg-white rounded-3xl shadow-2xl border border-[#eaedff] p-5 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#ffdad6] text-[#ad0033] flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[22px]">delete_forever</span>
               </div>
-            ) : (
-              <div className="hidden sm:flex px-2.5 py-1.5 rounded-lg bg-[#f2f3ff] items-center justify-between gap-1 text-[11px] text-[#434655] leading-tight">
-                <div className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[#004ac6] text-[15px] shrink-0">touch_app</span>
-                  <span>
-                    <strong className="text-[#131b2e] font-semibold">원터치 등록:</strong> 아래 프리셋을 먼저 누른 후, 달력에서 원하는 날짜를 누르면 적용됩니다.
-                  </span>
-                </div>
-                <span className="material-symbols-outlined text-[#737686] text-[14px] shrink-0">drag_indicator</span>
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-[#131b2e]">근무 기록을 삭제할까요?</h3>
+                <p className="text-xs text-[#434655] mt-1 leading-relaxed">
+                  <strong>{pendingDeleteDate}</strong>의{' '}
+                  <strong>{shiftMap.get(pendingDeleteDate)?.name || '근무'}</strong> 기록이 삭제됩니다.
+                </p>
               </div>
-            )}
-
-            {/* Horizontal Quick Preset Chips + Trash Can Drop Zone */}
-            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 pt-0.5">
-              {presets.map((preset) => {
-                const isSelectedForStamp = isQuickStampActive && quickStampPresetId === preset.id;
-                const presetPal = PRESET_COLOR_PALETTES[preset.colorTheme || preset.badgeTheme] || PRESET_COLOR_PALETTES.blue;
-                return (
-                  <button
-                    key={preset.id}
-                    draggable
-                    onDragStart={() => setDraggedPresetId(preset.id)}
-                    onClick={() => {
-                      if (isQuickStampActive && quickStampPresetId === preset.id) {
-                        handleExitQuickStamp(`'${preset.name}' 원터치 등록 모드가 해제되었습니다.`);
-                      } else {
-                        setQuickStampPresetId(preset.id);
-                        setIsQuickStampActive(true);
-                        showToast(`'${preset.name}' 선택됨! 달력에서 날짜를 누르면 적용됩니다.`);
-                      }
-                    }}
-                    className={`shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-left cursor-grab active:scale-95 transition-all ${
-                      isSelectedForStamp
-                        ? 'bg-white border-2 shadow-xs ring-2'
-                        : 'bg-[#f2f3ff] hover:bg-[#eaedff] border border-transparent'
-                    }`}
-                    style={
-                      isSelectedForStamp
-                        ? {
-                            borderColor: presetPal.hex,
-                            boxShadow: `0 0 0 2px ${presetPal.hex}25`,
-                          }
-                        : undefined
-                    }
-                    type="button"
-                  >
-                    <div
-                      className="flex items-center"
-                      style={{ color: presetPal.hex }}
-                    >
-                      <span className="hidden sm:inline material-symbols-outlined text-[15px] text-[#737686] opacity-60">
-                        drag_indicator
-                      </span>
-                      <span className="material-symbols-outlined text-[17px] sm:text-[18px] sm:ml-0.5">
-                        {isSelectedForStamp ? 'check_circle' : 'add_circle'}
-                      </span>
-                    </div>
-                    <div className="flex flex-col pr-0.5 sm:pr-1">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] sm:text-xs font-bold text-[#131b2e]">{preset.name}</span>
-                        {isSelectedForStamp && (
-                          <span
-                            className="text-[9px] px-1 rounded text-white font-bold"
-                            style={{ backgroundColor: presetPal.hex }}
-                          >
-                            활성
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-[#434655] tabular-nums">
-                        {preset.startTime}-{preset.endTime}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-
-              {/* Dedicated Trash / Remove Drop Zone */}
-              <div
-                onDragOver={handleDragOver}
-                onDrop={handleTrashDrop}
-                onClick={() => {
-                  deleteShiftByDate(selectedDate);
-                  showToast(`${selectedDate} 근무가 삭제되었습니다.`);
-                }}
-                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-[#ffdad6]/50 hover:bg-[#ffdad6] text-[#ad0033] border border-[#ad0033]/30 cursor-pointer active:scale-95 transition-all"
-                title="여기로 근무를 드래그하거나 클릭하여 선택일 근무 삭제"
-              >
-                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">delete</span>
-                <div className="flex flex-col">
-                  <span className="text-[11px] sm:text-xs font-bold">선택일 삭제</span>
-                  <span className="text-[9px] sm:text-[10px] text-[#ad0033]/80">탭/드롭</span>
-                </div>
-              </div>
-
+            </div>
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => openPresetModal()}
-                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-dashed border-[#c3c6d7] hover:bg-[#eaedff] text-[#004ac6] active:scale-95 transition-all text-left cursor-pointer"
                 type="button"
+                onClick={() => setPendingDeleteDate(null)}
+                className="flex-1 min-h-[42px] rounded-xl bg-[#f2f3ff] hover:bg-[#eaedff] text-[#434655] text-xs font-bold cursor-pointer active:scale-95 transition-all"
               >
-                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">add_circle_outline</span>
-                <div className="flex flex-col">
-                  <span className="text-[11px] sm:text-xs font-bold text-[#004ac6]">새 프리셋</span>
-                  <span className="text-[9px] sm:text-[10px] text-[#434655]">시간/색상</span>
-                </div>
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteShift}
+                className="flex-1 min-h-[42px] rounded-xl bg-[#ad0033] hover:bg-[#8c0029] text-white text-xs font-bold cursor-pointer active:scale-95 transition-all shadow-xs"
+              >
+                삭제하기
               </button>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -46,7 +46,7 @@ const MainLayout: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased overflow-x-hidden">
+    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased overflow-x-clip">
       {/* Top Application Bar */}
       <Header />
 

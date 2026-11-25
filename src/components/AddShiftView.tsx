@@ -20,6 +20,7 @@ export const AddShiftView: React.FC = () => {
   } = useShift();
 
   const [activeTabMode, setActiveTabMode] = useState<'work' | 'leave'>('work');
+  const [confirmDeletePending, setConfirmDeletePending] = useState<boolean>(false);
 
   // Existing shift on the selected date
   const existingShiftOnDate = useMemo(() => {
@@ -51,6 +52,7 @@ export const AddShiftView: React.FC = () => {
 
   // If a shift already exists on selectedDate, prefill inputs!
   useEffect(() => {
+    setConfirmDeletePending(false);
     if (existingShiftOnDate) {
       if (existingShiftOnDate.type === 'work') {
         setActiveTabMode('work');
@@ -333,19 +335,43 @@ export const AddShiftView: React.FC = () => {
 
       {/* Notice if shift already exists */}
       {existingShiftOnDate && (
-        <div className="p-3 bg-[#eaedff] rounded-2xl border border-[#004ac6]/30 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="material-symbols-outlined text-[#004ac6] text-[18px]">edit_note</span>
-            <span>
+        <div className="p-3 bg-[#eaedff] rounded-2xl border border-[#004ac6]/30 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 text-xs min-w-0">
+            <span className="material-symbols-outlined text-[#004ac6] text-[18px] shrink-0">edit_note</span>
+            <span className="truncate">
               선택한 날짜에 <strong>{existingShiftOnDate.name}</strong> 일정이 이미 등록되어 있습니다.
             </span>
           </div>
-          <button
-            onClick={() => deleteShiftByDate(selectedDate)}
-            className="px-2.5 py-1 rounded-xl bg-[#ffdad6] text-[#ad0033] font-bold text-xs hover:bg-[#ffdad6]/80"
-          >
-            일정 삭제
-          </button>
+          {confirmDeletePending ? (
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePending(false)}
+                className="px-2.5 py-1 rounded-xl bg-white text-[#434655] font-bold text-xs border border-[#c3c6d7]/50 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteShiftByDate(selectedDate);
+                  setConfirmDeletePending(false);
+                  showToast(`${selectedDate} 일정이 삭제되었습니다.`);
+                }}
+                className="px-2.5 py-1 rounded-xl bg-[#ad0033] text-white font-bold text-xs hover:bg-[#8c0029] cursor-pointer"
+              >
+                삭제 확인
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDeletePending(true)}
+              className="px-2.5 py-1 rounded-xl bg-[#ffdad6] text-[#ad0033] font-bold text-xs hover:bg-[#ffdad6]/80 shrink-0 cursor-pointer"
+            >
+              일정 삭제
+            </button>
+          )}
         </div>
       )}
 

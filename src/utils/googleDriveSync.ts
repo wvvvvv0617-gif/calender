@@ -1,16 +1,17 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
+  initializeAuth,
   getAuth,
   signInWithPopup,
   signInWithRedirect,
-  reauthenticateWithPopup,
   getRedirectResult,
-  setPersistence,
   indexedDBLocalPersistence,
   browserLocalPersistence,
+  browserPopupRedirectResolver,
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
+  Auth,
   User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -20,17 +21,26 @@ export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
 // Google OAuth access tokens typically expire in 60 minutes; refresh safely at 55 minutes
 const ACCESS_TOKEN_TTL_MS = 55 * 60 * 1000;
+const OAUTH_REDIRECT_PENDING_KEY = 'shiftmate_oauth_redirect_pending_v1';
 
 // Initialize Firebase App instance safely (prevent duplicate initializeApp calls)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
 
-// Explicitly enforce durable persistence across PWA restarts & browser refreshes
-const persistenceReady: Promise<void> = setPersistence(auth, indexedDBLocalPersistence)
-  .catch(() => setPersistence(auth, browserLocalPersistence))
-  .catch((err) => {
-    console.warn('Firebase Auth persistence setup warning:', err);
+// Prioritize browserLocalPersistence (synchronous localStorage) before indexedDBLocalPersistence.
+// In standalone mobile PWAs (Android Chrome / Samsung Internet / Brave / iOS), IndexedDB can stall
+// or drop connections after OS background suspension, whereas localStorage hydrates synchronously
+// and reliably persists the signed-in Firebase account across PWA restarts and offline launches.
+let authInstance: Auth;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: [browserLocalPersistence, indexedDBLocalPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
   });
+} catch {
+  // Auth was already initialized on this app instance
+  authInstance = getAuth(app);
+}
+export const auth = authInstance;
 
 let isSigningIn = false;
 // Access tokens are kept strictly in-memory (never persisted to localStorage/sessionStorage)
@@ -52,6 +62,32 @@ export const hasValidAccessToken = (): boolean => {
 
 export const clearAccessToken = (): void => {
   setCachedAccessToken(null);
+};
+
+/**
+ * Synchronous token check so click handlers can launch popups without yielding a microtask first
+ */
+export const getValidAccessTokenSync = (): string | null => {
+  if (!isAccessTokenValid()) {
+    setCachedAccessToken(null);
+    return null;
+  }
+  return cachedAccessToken;
+};
+
+/**
+ * Silently keep the Firebase Auth session fresh when the PWA returns to foreground or regains network.
+ * Never signs the user out if offline or if a transient network error occurs.
+ */
+export const keepFirebaseSessionAlive = async (): Promise<void> => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const currentUser = auth.currentUser;
+  if (!currentUser) return;
+  try {
+    await currentUser.getIdToken(false);
+  } catch (err) {
+    console.warn('Silent Firebase session keep-alive skipped:', err);
+  }
 };
 
 export class DriveApiError extends Error {
@@ -84,82 +120,100 @@ const buildGoogleProvider = (options?: {
   return provider;
 };
 
+const hasPendingRedirectFlag = (): boolean => {
+  try {
+    return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(OAUTH_REDIRECT_PENDING_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const setPendingRedirectFlag = (pending: boolean) => {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (pending) {
+      sessionStorage.setItem(OAUTH_REDIRECT_PENDING_KEY, '1');
+    } else {
+      sessionStorage.removeItem(OAUTH_REDIRECT_PENDING_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+};
+
 /**
  * Initialize auth state listener.
- * Firebase Auth persists the signed-in Google account across reloads/PWA restarts,
- * while the OAuth access token stays strictly in-memory.
+ * Hydrates directly from durable local persistence without triggering slow cross-origin redirect iframes
+ * on normal PWA launches, keeping the signed-in Google account intact across restarts and offline use.
  */
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string | null) => void,
   onAuthFailure?: () => void,
   onRedirectError?: (error: any) => void
 ) => {
-  const redirectChecked = persistenceReady
-    .then(() => getRedirectResult(auth))
-    .then((result) => {
-      if (result) {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        if (credential?.accessToken) {
-          setCachedAccessToken(credential.accessToken);
-        }
-        return result;
-      }
-      return null;
-    })
-    .catch((err) => {
-      console.warn('Google redirect result warning:', err);
-      if (onRedirectError) onRedirectError(err);
-      return null;
-    });
+  let active = true;
 
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    await redirectChecked;
-    if (user) {
-      const validToken = isAccessTokenValid() ? cachedAccessToken : null;
-      if (onAuthSuccess) onAuthSuccess(user, validToken);
-    } else {
-      if (!isSigningIn) {
-        setCachedAccessToken(null);
-        if (onAuthFailure) onAuthFailure();
+  const hydrationReady = (async () => {
+    // Only call getRedirectResult when we actually initiated a redirect fallback.
+    // Skipping it on normal PWA boots avoids cross-origin iframe delays/failures on mobile & offline launch.
+    if (hasPendingRedirectFlag()) {
+      setPendingRedirectFlag(false);
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          if (credential?.accessToken) {
+            setCachedAccessToken(credential.accessToken);
+          }
+        }
+      } catch (err) {
+        console.warn('Google redirect result warning:', err);
+        if (onRedirectError) onRedirectError(err);
       }
     }
+
+    try {
+      if (typeof auth.authStateReady === 'function') {
+        await auth.authStateReady();
+      }
+    } catch (err) {
+      console.warn('Firebase authStateReady warning:', err);
+    }
+  })();
+
+  const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
+    await hydrationReady;
+    if (!active) return;
+
+    const currentUser = user || auth.currentUser;
+    if (currentUser) {
+      const validToken = isAccessTokenValid() ? cachedAccessToken : null;
+      if (onAuthSuccess) onAuthSuccess(currentUser, validToken);
+    } else if (!isSigningIn) {
+      setCachedAccessToken(null);
+      if (onAuthFailure) onAuthFailure();
+    }
   });
+
+  return () => {
+    active = false;
+    unsubscribe();
+  };
 };
 
 /**
- * Sign in (or refresh token) with Google Popup, falling back to Redirect on standalone PWA if popups are blocked
+ * Sign in (or refresh Drive access token) with Google Popup synchronously from user click.
+ * Uses login_hint when an account is already linked so Google skips the account chooser.
  */
 export const googleSignIn = async (options?: {
   forceAccountSelect?: boolean;
   loginHint?: string | null;
 }): Promise<{ user: User; accessToken: string } | null> => {
+  const customProvider = buildGoogleProvider(options);
   try {
     isSigningIn = true;
-    await persistenceReady;
-
-    const customProvider = buildGoogleProvider(options);
-    let result;
-
-    if (auth.currentUser && !options?.forceAccountSelect) {
-      try {
-        result = await reauthenticateWithPopup(auth.currentUser, customProvider);
-      } catch (reauthErr: any) {
-        if (
-          reauthErr?.code === 'auth/user-mismatch' ||
-          reauthErr?.code === 'auth/credential-already-in-use'
-        ) {
-          result = await signInWithPopup(
-            auth,
-            buildGoogleProvider({ ...options, forceAccountSelect: true })
-          );
-        } else {
-          throw reauthErr;
-        }
-      }
-    } else {
-      result = await signInWithPopup(auth, customProvider);
-    }
-
+    // Call signInWithPopup immediately without prior awaits so mobile browsers keep user gesture activation
+    const result = await signInWithPopup(auth, customProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error('구글 인증 토큰(Access Token)을 가져오지 못했습니다.');
@@ -168,16 +222,18 @@ export const googleSignIn = async (options?: {
     setCachedAccessToken(credential.accessToken);
     return { user: result.user, accessToken: credential.accessToken };
   } catch (error: any) {
-    // Fallback to redirect flow if popup is blocked on top-level PWA/mobile webview
+    // Fallback to redirect flow only if popup is explicitly blocked on a top-level standalone window
     if (
       error?.code === 'auth/popup-blocked' &&
       typeof window !== 'undefined' &&
       window.self === window.top
     ) {
       try {
-        await signInWithRedirect(auth, buildGoogleProvider(options));
+        setPendingRedirectFlag(true);
+        await signInWithRedirect(auth, customProvider);
         return null;
       } catch (redirectErr) {
+        setPendingRedirectFlag(false);
         console.error('Google Redirect Sign-in error:', redirectErr);
         throw redirectErr;
       }
@@ -193,11 +249,7 @@ export const googleSignIn = async (options?: {
  * Return current valid in-memory access token (null if missing or expired)
  */
 export const getAccessToken = async (): Promise<string | null> => {
-  if (!isAccessTokenValid()) {
-    setCachedAccessToken(null);
-    return null;
-  }
-  return cachedAccessToken;
+  return getValidAccessTokenSync();
 };
 
 /**

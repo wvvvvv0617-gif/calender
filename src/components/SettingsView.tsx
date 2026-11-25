@@ -20,7 +20,7 @@ const WorkplaceSettingsCard: React.FC<WorkplaceSettingsCardProps> = ({
   onLongPressDelete,
 }) => {
   const bind = useLongPress({
-    threshold: 480,
+    threshold: 850,
     onLongPress: () => {
       onLongPressDelete(wp);
     },
@@ -119,6 +119,8 @@ export const SettingsView: React.FC = () => {
     openWorkplaceModal,
     openTermsModal,
     openDataSafetyModal,
+    isAuthLoading,
+    hasUsedDriveBefore,
     isGoogleDriveConnected,
     googleUser,
     lastDriveSyncTime,
@@ -1014,6 +1016,10 @@ export const SettingsView: React.FC = () => {
                   <span className="text-[10px] font-bold bg-[#6cf8bb]/40 text-[#006c49] px-1.5 py-0.2 rounded-md">
                     연결됨
                   </span>
+                ) : isAuthLoading && hasUsedDriveBefore ? (
+                  <span className="text-[10px] font-bold bg-[#dbe1ff] text-[#004ac6] px-1.5 py-0.2 rounded-md">
+                    연결 확인 중...
+                  </span>
                 ) : (
                   <span className="text-[10px] font-bold bg-[#ffdad6]/60 text-[#ad0033] px-1.5 py-0.2 rounded-md">
                     미연결
@@ -1023,6 +1029,8 @@ export const SettingsView: React.FC = () => {
               <p className="text-[11px] text-[#434655] mt-0.5 truncate">
                 {isGoogleDriveConnected
                   ? `${googleUser?.email || '구글 계정'} 연동 완료 · 크롬 기록삭제에도 영구 보존`
+                  : isAuthLoading && hasUsedDriveBefore
+                  ? '저장된 구글 계정 로그인 상태를 불러오는 중입니다...'
                   : '구글 계정(Gmail)만 있으면 100% 무료로 크롬 기록삭제에도 영구 보존됩니다.'}
               </p>
             </div>

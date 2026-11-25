@@ -32,11 +32,13 @@ import {
   downloadBackupFile,
 } from '../utils/storageBackup';
 import {
+  auth,
   googleSignIn,
   logout as googleLogout,
-  getAccessToken,
+  getValidAccessTokenSync,
   clearAccessToken,
   hasValidAccessToken,
+  keepFirebaseSessionAlive,
   initAuth,
   findDriveBackupFile,
   readDriveBackupFile,
@@ -168,6 +170,7 @@ interface ShiftContextType {
 
   // Google Drive Cloud Backup & Sync
   googleUser: User | null;
+  isAuthLoading: boolean;
   isGoogleDriveConnected: boolean;
   hasActiveDriveToken: boolean;
   isDriveSyncing: boolean;
@@ -210,6 +213,7 @@ const STORAGE_KEYS = {
   DRIVE_CONNECTED_EVER: 'shiftmate_drive_ever_connected_v1',
   DRIVE_PENDING_BACKUP: 'shiftmate_drive_pending_backup_v1',
   DRIVE_PENDING_SUMMARY: 'shiftmate_drive_pending_summary_v1',
+  GOOGLE_LOGIN_HINT: 'shiftmate_google_login_hint_v1',
 };
 
 export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -1100,8 +1104,16 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  // Google Drive Cloud Backup & Sync State
-  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  // Google Drive Cloud Backup & Sync State (hydrate synchronously from persistent Firebase Auth)
+  const [googleUser, setGoogleUser] = useState<User | null>(() => auth.currentUser);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(() => !auth.currentUser);
+  const [savedLoginHint, setSavedLoginHint] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.GOOGLE_LOGIN_HINT);
+    } catch {
+      return null;
+    }
+  });
   const [hasActiveDriveToken, setHasActiveDriveToken] = useState<boolean>(() => hasValidAccessToken());
   const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
   const [lastDriveSyncTime, setLastDriveSyncTime] = useState<string | null>(() => {
@@ -1148,10 +1160,14 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setIsReconnectBannerDismissed(true);
   };
 
-  const markDriveUsed = () => {
+  const markDriveUsed = (email?: string | null) => {
     setHasUsedDriveBefore(true);
     try {
       localStorage.setItem(STORAGE_KEYS.DRIVE_CONNECTED_EVER, 'true');
+      if (email) {
+        setSavedLoginHint(email);
+        localStorage.setItem(STORAGE_KEYS.GOOGLE_LOGIN_HINT, email);
+      }
     } catch {
       // ignore storage errors
     }
@@ -1227,8 +1243,9 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const unsubscribe = initAuth(
       (user, token) => {
         setGoogleUser(user);
+        setIsAuthLoading(false);
         setHasActiveDriveToken(!!token);
-        markDriveUsed();
+        markDriveUsed(user.email);
         if (token) {
           findDriveBackupFile(token)
             .then((info) => {
@@ -1254,6 +1271,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       },
       () => {
         setGoogleUser(null);
+        setIsAuthLoading(false);
         setHasActiveDriveToken(false);
         setDriveFileInfo(null);
       },
@@ -1269,7 +1287,31 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
       }
     );
+
+    // Sync in-memory token validity & silently keep Firebase session alive when PWA resumes or regains network
+    const handleResumeOrOnline = () => {
+      if (document.visibilityState === 'visible') {
+        setHasActiveDriveToken(hasValidAccessToken());
+        keepFirebaseSessionAlive();
+      }
+    };
+    const handlePageShow = () => {
+      setHasActiveDriveToken(hasValidAccessToken());
+      keepFirebaseSessionAlive();
+    };
+    const handleOnline = () => {
+      setHasActiveDriveToken(hasValidAccessToken());
+      keepFirebaseSessionAlive();
+    };
+
+    document.addEventListener('visibilitychange', handleResumeOrOnline);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('online', handleOnline);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleResumeOrOnline);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('online', handleOnline);
       if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, []);
@@ -1278,29 +1320,37 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return (err instanceof DriveApiError && err.status === 401) || err?.status === 401;
   };
 
+  const getEffectiveLoginHint = (explicitHint?: string | null): string | null => {
+    return explicitHint ?? googleUser?.email ?? savedLoginHint ?? null;
+  };
+
   const obtainInteractiveToken = async (loginHint?: string | null): Promise<string | null> => {
-    const signInRes = await googleSignIn({ loginHint: loginHint ?? googleUser?.email });
+    // Invoke googleSignIn synchronously before any await to preserve mobile browser user gesture
+    const signInRes = await googleSignIn({ loginHint: getEffectiveLoginHint(loginHint) });
     if (!signInRes?.accessToken) {
       return null;
     }
     setAuthDomainError(null);
     setGoogleUser(signInRes.user);
+    setIsAuthLoading(false);
     setHasActiveDriveToken(true);
-    markDriveUsed();
+    markDriveUsed(signInRes.user.email);
     return signInRes.accessToken;
   };
 
   const refreshDriveStatus = async (options?: { interactive?: boolean }) => {
     try {
-      setIsDriveSyncing(true);
-      let token = await getAccessToken();
+      let token = getValidAccessTokenSync();
       if (!token) {
         if (!options?.interactive) {
           setHasActiveDriveToken(false);
           return;
         }
+        setIsDriveSyncing(true);
         token = await obtainInteractiveToken(googleUser?.email);
         if (!token) return;
+      } else {
+        setIsDriveSyncing(true);
       }
 
       const fetchAndApplyInfo = async (activeToken: string) => {
@@ -1337,7 +1387,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } catch (err: any) {
       console.error(err);
       const errCode = err?.code || '';
-      if (errCode !== 'auth/popup-closed-by-user') {
+      if (errCode !== 'auth/popup-closed-by-user' && errCode !== 'auth/cancelled-popup-request') {
         showToast('⚠️ 드라이브 파일 상태 확인 실패: ' + (err.message || ''));
       }
     } finally {
@@ -1350,13 +1400,14 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setIsDriveSyncing(true);
       const result = await googleSignIn({
         forceAccountSelect,
-        loginHint: forceAccountSelect ? null : googleUser?.email,
+        loginHint: forceAccountSelect ? null : getEffectiveLoginHint(),
       });
       if (result) {
         setAuthDomainError(null);
         setGoogleUser(result.user);
+        setIsAuthLoading(false);
         setHasActiveDriveToken(true);
-        markDriveUsed();
+        markDriveUsed(result.user.email);
         showToast(`🎉 ${result.user.displayName || result.user.email || '구글'} 계정으로 구글 드라이브가 연결되었습니다!`);
         try {
           const info = await findDriveBackupFile(result.accessToken);
@@ -1387,6 +1438,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showToast('⚠️ 도메인 승인이 필요합니다. 아래 안내에 따라 Firebase에 등록해주세요.');
       } else if (errCode === 'auth/popup-closed-by-user') {
         showToast('구글 로그인 창이 닫혔습니다.');
+      } else if (errCode === 'auth/cancelled-popup-request') {
+        // Ignore duplicate rapid clicks while popup is already open
       } else {
         showToast('⚠️ 구글 드라이브 연결 실패: ' + (errMsg || '인증이 취소되었거나 오류가 발생했습니다.'));
       }
@@ -1398,12 +1451,13 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const reconnectAndSyncDrive = async () => {
     try {
       setIsDriveSyncing(true);
-      const result = await googleSignIn({ loginHint: googleUser?.email });
+      const result = await googleSignIn({ loginHint: getEffectiveLoginHint() });
       if (result) {
         setAuthDomainError(null);
         setGoogleUser(result.user);
+        setIsAuthLoading(false);
         setHasActiveDriveToken(true);
-        markDriveUsed();
+        markDriveUsed(result.user.email);
         let foundInfo: DriveFileInfo | null = null;
         try {
           foundInfo = await findDriveBackupFile(result.accessToken);
@@ -1457,6 +1511,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showToast('⚠️ 도메인 승인이 필요합니다. 안내된 도메인을 등록해주세요.');
       } else if (errCode === 'auth/popup-closed-by-user') {
         showToast('구글 로그인 창이 닫혔습니다.');
+      } else if (errCode === 'auth/cancelled-popup-request') {
+        // Ignore duplicate rapid clicks while popup is already open
       } else {
         showToast('⚠️ 구글 드라이브 재연결 실패: ' + (errMsg || '오류가 발생했습니다.'));
       }
@@ -1472,9 +1528,11 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setHasActiveDriveToken(false);
       setDriveFileInfo(null);
       setHasUsedDriveBefore(false);
+      setSavedLoginHint(null);
       markPendingDriveBackup(false);
       try {
         localStorage.removeItem(STORAGE_KEYS.DRIVE_CONNECTED_EVER);
+        localStorage.removeItem(STORAGE_KEYS.GOOGLE_LOGIN_HINT);
       } catch {
         // ignore
       }
@@ -1487,7 +1545,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const executeSaveToDrive = async (): Promise<boolean> => {
     try {
       setIsDriveSyncing(true);
-      let token = await getAccessToken();
+      // Synchronous token check ensures popup opens directly in the user click stack
+      let token = getValidAccessTokenSync();
 
       // Acquire in-memory OAuth token using saved login_hint (skips account picker when possible)
       if (!token) {
@@ -1540,6 +1599,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showToast('⚠️ 도메인 승인이 필요합니다.');
       } else if (errCode === 'auth/popup-closed-by-user') {
         showToast('구글 로그인 창이 닫혀 백업이 보류되었습니다.');
+      } else if (errCode === 'auth/cancelled-popup-request') {
+        // Ignore duplicate rapid clicks while popup is already open
       } else {
         showToast('⚠️ 드라이브 저장 실패: ' + (errMsg || ''));
       }
@@ -1561,7 +1622,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const executeRestoreFromDrive = async (): Promise<boolean> => {
     try {
       setIsDriveSyncing(true);
-      let token = await getAccessToken();
+      // Synchronous token check ensures popup opens directly in the user click stack
+      let token = getValidAccessTokenSync();
       if (!token) {
         token = await obtainInteractiveToken(googleUser?.email);
         if (!token) {
@@ -1606,6 +1668,8 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const errCode = err?.code || '';
       if (errCode === 'auth/popup-closed-by-user') {
         showToast('구글 로그인 창이 닫혀 복원이 취소되었습니다.');
+      } else if (errCode === 'auth/cancelled-popup-request') {
+        // Ignore duplicate rapid clicks while popup is already open
       } else {
         showToast('⚠️ 드라이브 복원 실패: ' + (err.message || ''));
       }
@@ -1665,6 +1729,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     changeSummary: driveConfirmState.changeSummary,
     isAutoPrompt: driveConfirmState.isAutoPrompt,
     needsSignIn: !isGoogleDriveConnected,
+    hasActiveDriveToken,
     details: {
       shiftsCount: shifts.length,
       workplacesCount: workplaces.length,
@@ -1767,6 +1832,7 @@ export const ShiftProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         openDataSafetyModal,
         closeDataSafetyModal,
         googleUser,
+        isAuthLoading,
         isGoogleDriveConnected,
         hasActiveDriveToken,
         isDriveSyncing,

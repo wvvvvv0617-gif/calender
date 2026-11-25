@@ -43,7 +43,7 @@ const WorkplaceDropdownItem: React.FC<WorkplaceDropdownItemProps> = ({
   onLongPressDelete,
 }) => {
   const bind = useLongPress({
-    threshold: 480,
+    threshold: 850,
     onLongPress: () => {
       onLongPressDelete(wp);
     },
@@ -114,6 +114,7 @@ export const Header: React.FC = () => {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     openDataSafetyModal,
+    isAuthLoading,
     isGoogleDriveConnected,
     hasPendingDriveBackup,
     hasUsedDriveBefore,
@@ -323,7 +324,7 @@ export const Header: React.FC = () => {
             className={`flex items-center justify-center gap-1 min-h-[36px] min-w-[36px] px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer border ${
               hasPendingDriveBackup && (isGoogleDriveConnected || hasUsedDriveBefore)
                 ? 'bg-[#fff3e0] hover:bg-[#ffe0b2] text-[#b35300] border-[#ffb74d]/70'
-                : isGoogleDriveConnected
+                : isGoogleDriveConnected || (isAuthLoading && hasUsedDriveBefore)
                 ? 'bg-[#eff3ff] hover:bg-[#dbe1ff] text-[#004ac6] border-[#004ac6]/30'
                 : 'bg-[#6cf8bb]/25 hover:bg-[#6cf8bb]/40 text-[#006c49] border-[#006c49]/20'
             }`}
@@ -345,6 +346,8 @@ export const Header: React.FC = () => {
                 ? '백업 대기'
                 : isGoogleDriveConnected
                 ? '드라이브 연동됨'
+                : isAuthLoading && hasUsedDriveBefore
+                ? '연동 확인 중'
                 : '구글 드라이브'}
             </span>
           </button>

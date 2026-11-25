@@ -3,6 +3,7 @@ import { useShift } from '../context/ShiftContext';
 
 export const DriveReconnectBanner: React.FC = () => {
   const {
+    isAuthLoading,
     hasUsedDriveBefore,
     isGoogleDriveConnected,
     hasPendingDriveBackup,
@@ -14,6 +15,11 @@ export const DriveReconnectBanner: React.FC = () => {
     openDataSafetyModal,
     isDriveSyncing,
   } = useShift();
+
+  // Wait for persisted Firebase Auth state to finish hydrating before showing reconnect banner
+  if (isAuthLoading) {
+    return null;
+  }
 
   // State A: Previously connected to Google Drive, new browser session requires 1-tap reconnect
   if (hasUsedDriveBefore && !isGoogleDriveConnected && !isReconnectBannerDismissed) {

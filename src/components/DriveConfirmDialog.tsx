@@ -8,6 +8,7 @@ export interface DriveConfirmDialogProps {
   changeSummary?: string | null;
   isAutoPrompt?: boolean;
   needsSignIn?: boolean;
+  hasActiveDriveToken?: boolean;
   details?: {
     shiftsCount: number;
     workplacesCount: number;
@@ -28,6 +29,7 @@ export const DriveConfirmDialog: React.FC<DriveConfirmDialogProps> = ({
   changeSummary,
   isAutoPrompt = false,
   needsSignIn = false,
+  hasActiveDriveToken = true,
   details,
   onConfirm,
   onCancel,
@@ -97,6 +99,8 @@ export const DriveConfirmDialog: React.FC<DriveConfirmDialogProps> = ({
             {type === 'save'
               ? needsSignIn
                 ? '확인을 누르면 구글 계정 인증 후 내 드라이브의 기존 백업 파일을 최신 데이터로 업데이트합니다.'
+                : !hasActiveDriveToken
+                ? '구글 계정은 연결 유지 중입니다. 확인을 누르면 간단한 드라이브 권한 확인 후 최신 데이터로 자동 저장됩니다.'
                 : '구글 드라이브 내 기존 파일 내용이 현재 앱의 최신 데이터로 업데이트(덮어쓰기)됩니다.'
               : '현재 기기에 저장된 근무 기록이 구글 드라이브의 저장 데이터로 교체(복원)됩니다.'}
           </span>

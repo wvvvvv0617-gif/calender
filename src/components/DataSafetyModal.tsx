@@ -17,6 +17,7 @@ export const DataSafetyModal: React.FC = () => {
     showToast,
     // Google Drive integration
     googleUser,
+    isAuthLoading,
     isGoogleDriveConnected,
     hasActiveDriveToken,
     isDriveSyncing,
@@ -155,7 +156,12 @@ export const DataSafetyModal: React.FC = () => {
               <strong> 내 구글 드라이브에 안전하게 영구 보관</strong>됩니다.
             </p>
 
-            {!isGoogleDriveConnected ? (
+            {isAuthLoading ? (
+              <div className="flex items-center justify-center gap-2 p-4 bg-white/80 rounded-xl border border-[#dbe1ff] text-xs font-semibold text-[#434655]">
+                <span className="material-symbols-outlined text-[18px] text-[#004ac6] animate-spin">sync</span>
+                <span>연결된 구글 계정 확인 중...</span>
+              </div>
+            ) : !isGoogleDriveConnected ? (
               <div className="flex flex-col items-center justify-center p-3 bg-white/80 rounded-xl border border-[#dbe1ff] gap-2.5">
                 <GoogleSignInButton
                   onClick={() => connectGoogleDrive(false)}
