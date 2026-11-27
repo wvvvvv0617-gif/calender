@@ -333,15 +333,17 @@ export const CalendarView: React.FC = () => {
     );
   }, []);
 
-  // 3-second strictly scroll-safe long-press delete state
-  // Cancels immediately if the screen scrolls anywhere, the touched cell moves on screen,
-  // or the finger/pointer moves even slightly (>5px).
-  const LONG_PRESS_DELETE_MS = 3000;
-  const LONG_PRESS_VISUAL_DELAY_MS = 500;
+  // 4-second strictly drag/scroll-safe long-press delete state
+  // 1) Recognizes stationary hold after 300ms (no flicker during normal tap/scroll)
+  // 2) Requires 4 full seconds (4000ms) AFTER recognition (total 4300ms) with ZERO drag or scroll
+  // 3) Disabled completely while Quick Stamp mode is active so stamping + dragging never deletes
+  const LONG_PRESS_RECOGNIZE_MS = 300;
+  const LONG_PRESS_HOLD_MS = 4000;
+  const LONG_PRESS_TOTAL_MS = LONG_PRESS_RECOGNIZE_MS + LONG_PRESS_HOLD_MS;
   const LONG_PRESS_MOVE_PX = 5;
   const LONG_PRESS_SCROLL_PX = 1;
   const LONG_PRESS_RECT_DRIFT_PX = 1.5;
-  const RECENT_SCROLL_COOLDOWN_MS = 450;
+  const RECENT_SCROLL_COOLDOWN_MS = 500;
 
   const getCurrentScrollMetrics = useCallback(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -365,6 +367,7 @@ export const CalendarView: React.FC = () => {
   const touchTrackRef = useRef<{
     dateStr: string;
     targetEl: HTMLElement | null;
+    touchIdentifier: number | null;
     startClientX: number;
     startClientY: number;
     startPageX: number;
@@ -440,7 +443,7 @@ export const CalendarView: React.FC = () => {
     [getCurrentScrollMetrics]
   );
 
-  // Global capture listeners: cancel immediately on ANY scroll, wheel, pointer/touch movement, or OS cancel
+  // Global capture listeners: cancel immediately on ANY scroll, wheel, drag, pointer/touch movement, or OS cancel
   useEffect(() => {
     const handleAnyScroll = () => {
       scrollEventCounterRef.current += 1;
@@ -458,6 +461,10 @@ export const CalendarView: React.FC = () => {
         return;
       }
       const touch = e.touches[0];
+      if (state.touchIdentifier !== null && touch.identifier !== state.touchIdentifier) {
+        cancelLongPress();
+        return;
+      }
       const dxClient = Math.abs(touch.clientX - state.startClientX);
       const dyClient = Math.abs(touch.clientY - state.startClientY);
       const dxPage = Math.abs(touch.pageX - state.startPageX);
@@ -506,6 +513,7 @@ export const CalendarView: React.FC = () => {
     window.addEventListener('pointercancel', handleGlobalCancel, { capture: true, passive: true });
     window.addEventListener('touchcancel', handleGlobalCancel, { capture: true, passive: true });
     window.addEventListener('touchend', handleGlobalCancel, { capture: true, passive: true });
+    window.addEventListener('dragstart', handleGlobalCancel, { capture: true });
     window.addEventListener('blur', handleGlobalCancel);
     document.addEventListener('visibilitychange', handleGlobalCancel);
 
@@ -522,6 +530,7 @@ export const CalendarView: React.FC = () => {
       window.removeEventListener('pointercancel', handleGlobalCancel, true);
       window.removeEventListener('touchcancel', handleGlobalCancel, true);
       window.removeEventListener('touchend', handleGlobalCancel, true);
+      window.removeEventListener('dragstart', handleGlobalCancel, true);
       window.removeEventListener('blur', handleGlobalCancel);
       document.removeEventListener('visibilitychange', handleGlobalCancel);
       vv?.removeEventListener('scroll', handleAnyScroll);
@@ -529,6 +538,13 @@ export const CalendarView: React.FC = () => {
       cancelLongPress();
     };
   }, [cancelLongPress, hasViewportOrElementMoved]);
+
+  // Cancel any in-progress long-press if Quick Stamp mode turns ON
+  useEffect(() => {
+    if (isQuickStampActive) {
+      cancelLongPress();
+    }
+  }, [isQuickStampActive, cancelLongPress]);
 
   // Request confirmation before deleting a shift (prevents accidental deletion during touch/scroll)
   const requestDeleteShift = useCallback(
@@ -551,11 +567,14 @@ export const CalendarView: React.FC = () => {
       clientY: number,
       pageX: number,
       pageY: number,
-      isTouch: boolean
+      isTouch: boolean,
+      touchIdentifier: number | null
     ) => {
       cancelLongPress();
 
-      // Do not arm long-press if there is no shift on this date or if the screen was just scrolled
+      // Never allow long-press delete while Quick Stamp mode is active, if no shift exists,
+      // or right after the user finished scrolling/dragging
+      if (isQuickStampActive) return;
       if (!shiftMap.get(dateStr)) return;
       if (Date.now() - lastScrollTimeRef.current < RECENT_SCROLL_COOLDOWN_MS) return;
 
@@ -565,6 +584,7 @@ export const CalendarView: React.FC = () => {
       const state = {
         dateStr,
         targetEl,
+        touchIdentifier,
         startClientX: clientX,
         startClientY: clientY,
         startPageX: pageX,
@@ -585,22 +605,23 @@ export const CalendarView: React.FC = () => {
       touchTrackRef.current = state;
       suppressClickRef.current = false;
 
-      // Continuous watchdog every 80ms: detects any scroll/layout shift/rect movement immediately
-      // and updates countdown indicator only after 0.5s of 100% stationary press
+      // Continuous watchdog every 80ms: detects any scroll/drag/layout shift/rect movement immediately
+      // Recognizes stationary hold at 300ms, then counts down 4 full seconds (4 -> 3 -> 2 -> 1)
       longPressWatchdogRef.current = setInterval(() => {
         if (state.cancelled || touchTrackRef.current !== state || hasViewportOrElementMoved(state)) {
           cancelLongPress();
           return;
         }
         const elapsed = Date.now() - state.startedAt;
-        if (elapsed >= LONG_PRESS_VISUAL_DELAY_MS) {
-          const progress = Math.min(100, Math.round((elapsed / LONG_PRESS_DELETE_MS) * 100));
-          const remainingSec = Math.max(1, Math.ceil((LONG_PRESS_DELETE_MS - elapsed) / 1000));
+        if (elapsed >= LONG_PRESS_RECOGNIZE_MS) {
+          const holdElapsed = elapsed - LONG_PRESS_RECOGNIZE_MS;
+          const progress = Math.min(100, Math.round((holdElapsed / LONG_PRESS_HOLD_MS) * 100));
+          const remainingSec = Math.max(1, Math.ceil((LONG_PRESS_HOLD_MS - holdElapsed) / 1000));
           setPressingInfo({ dateStr, progress, remainingSec });
         }
       }, 80);
 
-      // Trigger delete confirmation strictly after 3.0 seconds of 100% stationary hold
+      // Trigger delete confirmation strictly 4.0 seconds AFTER stationary hold recognition (4.3s total)
       longPressTimerRef.current = setTimeout(() => {
         if (state.cancelled || touchTrackRef.current !== state || hasViewportOrElementMoved(state)) {
           cancelLongPress();
@@ -614,9 +635,17 @@ export const CalendarView: React.FC = () => {
         }
         setSelectedDate(dateStr);
         requestDeleteShift(dateStr);
-      }, LONG_PRESS_DELETE_MS);
+      }, LONG_PRESS_TOTAL_MS);
     },
-    [cancelLongPress, shiftMap, getCurrentScrollMetrics, hasViewportOrElementMoved, setSelectedDate, requestDeleteShift]
+    [
+      cancelLongPress,
+      isQuickStampActive,
+      shiftMap,
+      getCurrentScrollMetrics,
+      hasViewportOrElementMoved,
+      setSelectedDate,
+      requestDeleteShift,
+    ]
   );
 
   const handleCellTouchStart = useCallback(
@@ -634,7 +663,8 @@ export const CalendarView: React.FC = () => {
         touch.clientY,
         touch.pageX,
         touch.pageY,
-        true
+        true,
+        touch.identifier
       );
     },
     [cancelLongPress, startCellLongPress]
@@ -649,6 +679,10 @@ export const CalendarView: React.FC = () => {
         return;
       }
       const touch = e.touches[0];
+      if (state.touchIdentifier !== null && touch.identifier !== state.touchIdentifier) {
+        cancelLongPress();
+        return;
+      }
       const dxClient = Math.abs(touch.clientX - state.startClientX);
       const dyClient = Math.abs(touch.clientY - state.startClientY);
       const dxPage = Math.abs(touch.pageX - state.startPageX);
@@ -672,7 +706,7 @@ export const CalendarView: React.FC = () => {
       if (e.button !== 0) return;
       // Ignore synthetic mouse events fired after mobile touch interactions
       if (isTouchDevice || Date.now() - lastTouchTimeRef.current < 1500) return;
-      startCellLongPress(dateStr, e.currentTarget, e.clientX, e.clientY, e.pageX, e.pageY, false);
+      startCellLongPress(dateStr, e.currentTarget, e.clientX, e.clientY, e.pageX, e.pageY, false, null);
     },
     [isTouchDevice, startCellLongPress]
   );
@@ -1051,13 +1085,18 @@ export const CalendarView: React.FC = () => {
             {pressingInfo ? (
               <span className="text-[#ad0033] text-[10px] sm:text-[11px] font-bold flex items-center gap-1 tabular-nums">
                 <span className="material-symbols-outlined text-[13px] sm:text-[14px]">timer</span>
-                <span>삭제까지 {pressingInfo.remainingSec}초 (움직이거나 스크롤 시 즉시 취소)</span>
+                <span>삭제까지 {pressingInfo.remainingSec}초 (드래그·스크롤 시 즉시 취소)</span>
+              </span>
+            ) : isQuickStampActive ? (
+              <span className="text-[#004ac6] text-[10px] sm:text-[11px] font-semibold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] sm:text-[14px]">verified_user</span>
+                <span>스탬프 모드 중 오삭제 자동 차단</span>
               </span>
             ) : (
               <span className="text-[#434655] text-[10px] sm:text-[11px] flex items-center gap-1">
                 <span className="material-symbols-outlined text-[13px] sm:text-[14px] text-[#004ac6]">shield</span>
-                <span className="sm:hidden">3초 꾹 누르기(스크롤 시 취소) · [삭제]</span>
-                <span className="hidden sm:inline">3초 꾹 누르기 또는 [삭제] 버튼 (스크롤 시 자동 취소)</span>
+                <span className="sm:hidden">4초 꾹 누르기(드래그 시 취소) · [삭제]</span>
+                <span className="hidden sm:inline">4초 꾹 누르기 또는 [삭제] 버튼 (드래그·스크롤 시 자동 취소)</span>
               </span>
             )}
           </div>
@@ -1152,9 +1191,9 @@ export const CalendarView: React.FC = () => {
                   }}
                   title={
                     holiday
-                      ? `법정 공휴일: ${holiday.name}${shift ? ` · ${shift.name} (3초 꾹 누르면 삭제)` : ''}`
+                      ? `법정 공휴일: ${holiday.name}${shift ? ` · ${shift.name} (4초 꾹 누르면 삭제)` : ''}`
                       : shift
-                      ? `${shift.name} (탭하여 상세 보기 · 3초 꾹 누르면 삭제)`
+                      ? `${shift.name} (탭하여 상세 보기 · 4초 꾹 누르면 삭제)`
                       : '탭하여 근무 등록'
                   }
                   style={
@@ -1355,7 +1394,7 @@ export const CalendarView: React.FC = () => {
                         }
                       : undefined
                   }
-                  className={`flex flex-col rounded-2xl p-3 border transition-all cursor-pointer relative select-none ${
+                  className={`flex flex-col rounded-2xl p-3 border transition-all cursor-pointer relative select-none overflow-hidden ${
                     isPressingDelete
                       ? 'border-2 border-[#ad0033] bg-[#ffdad6]/50 ring-2 ring-[#ad0033]/35 scale-[0.98]'
                       : isSelected
@@ -1369,6 +1408,13 @@ export const CalendarView: React.FC = () => {
                       : 'bg-[#faf8ff] hover:bg-[#f2f3ff] border-[#c3c6d7]/30'
                   }`}
                 >
+                  {/* 4-Second Stationary Long-Press Progress Bar */}
+                  {isPressingDelete && pressingInfo && (
+                    <div
+                      className="absolute bottom-0 left-0 h-1 bg-[#ad0033] transition-all duration-75 pointer-events-none"
+                      style={{ width: `${pressingInfo.progress}%` }}
+                    />
+                  )}
                   {/* Day Header */}
                   <div className="flex items-center justify-between pb-2 border-b border-[#c3c6d7]/20 flex-wrap gap-1">
                     <div className="flex items-center gap-1.5">

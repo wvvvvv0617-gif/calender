@@ -1139,8 +1139,35 @@ export const SettingsView: React.FC = () => {
           </button>
         </div>
 
-        <div className="pt-1 flex items-center justify-between text-[11px] text-[#737686]">
-          <span>ShiftMate Core v2.6.0 (2026 근로기준법 개정 반영)</span>
+        <div className="pt-2 border-t border-[#c3c6d7]/20 flex items-center justify-between flex-wrap gap-2 text-[11px] text-[#737686]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>ShiftMate Core v2.7.0 (2026 근로기준법 개정 반영)</span>
+            <button
+              type="button"
+              onClick={async () => {
+                showToast('최신 앱 버전을 확인하고 적용하는 중입니다...');
+                try {
+                  if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map((r) => r.update().catch(() => undefined)));
+                    await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+                  }
+                  if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map((k) => caches.delete(k)));
+                  }
+                } catch (e) {
+                  console.warn('PWA cache refresh warning:', e);
+                }
+                window.location.reload();
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#eaedff] hover:bg-[#dbe1ff] text-[#004ac6] font-bold cursor-pointer active:scale-95 transition-all"
+              title="저장된 근무 기록은 유지하고 웹앱 화면만 최신 버전으로 새로 불러옵니다"
+            >
+              <span className="material-symbols-outlined text-[13px]">system_update</span>
+              <span>최신 버전 업데이트</span>
+            </button>
+          </div>
           <button
             type="button"
             onClick={openTermsModal}

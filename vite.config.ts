@@ -88,6 +88,9 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
+          cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           globIgnores: ['**/aistudio/**'],
           navigateFallbackDenylist: [/^\/__\/auth/],
